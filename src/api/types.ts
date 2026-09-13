@@ -136,3 +136,12 @@ export interface DisabledRecord {
   def: Record<string, unknown>;
   disabledAt: number;
 }
+
+export interface ConnectivityResult {
+  /** "ok" | "failed" */
+  status: string;
+  latencyMs: number;
+  serverName: string | null;
+  serverVersion: string | null;
+  error: string | null;
+}

@@ -23,8 +23,7 @@ const HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 
 /* ---------------- HTTP ---------------- */
 
-fn agent_with_proxy(proxy: Option<ureq::Proxy>) -> ureq::Agent {
-    let mut b = ureq::AgentBuilder::new().timeout(HTTP_TIMEOUT);
+fn agent_with_proxy(proxy: Option<ureq::Proxy>) -> ureq::Agent {    let mut b = ureq::AgentBuilder::new().timeout(HTTP_TIMEOUT);
     if let Some(p) = proxy {
         b = b.proxy(p);
     }
@@ -76,6 +75,54 @@ fn http_get_json_once<T: for<'de> Deserialize<'de>>(
             "网络请求失败（请检查网络或代理设置）: {e}"
         ))),
     }
+}
+
+/// 连通性测试用：POST JSON（双策略降级与市场搜索一致）
+pub(crate) fn post_json(url: &str, body: &str) -> Result<serde_json::Value> {
+    let strategies = [env_proxy(), None];
+    let mut last_err: Option<CoreError> = None;
+    for proxy in strategies {
+        let agent = agent_with_proxy(proxy);
+        let res = agent
+            .post(url)
+            .set("Content-Type", "application/json")
+            .set("Accept", "application/json, text/event-stream")
+            .timeout(HTTP_TIMEOUT)
+            .send_string(body);
+        match res {
+            Ok(resp) => {
+                return resp
+                    .into_json::<serde_json::Value>()
+                    .map_err(|e| CoreError::Other(format!("响应解析失败: {e}")));
+            }
+            Err(ureq::Error::Status(code, resp)) => {
+                let text = resp.into_string().unwrap_or_default();
+                // HTTP 状态码错误也可能是 JSON-RPC error 响应，尝试解析
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
+                    if v.get("jsonrpc").is_some() {
+                        return Ok(v);
+                    }
+                }
+                last_err = Some(CoreError::Other(format!("HTTP {code}")));
+            }
+            Err(e) => last_err = Some(CoreError::Other(format!("网络请求失败: {e}"))),
+        }
+    }
+    Err(last_err.unwrap_or_else(|| CoreError::Other("网络请求失败".into())))
+}
+
+/// 连通性测试用：GET 状态码
+pub(crate) fn get_status(url: &str) -> Result<u16> {
+    let strategies = [env_proxy(), None];
+    let mut last_err: Option<CoreError> = None;
+    for proxy in strategies {
+        match agent_with_proxy(proxy).get(url).call() {
+            Ok(resp) => return Ok(resp.status()),
+            Err(ureq::Error::Status(code, _)) => return Ok(code),
+            Err(e) => last_err = Some(CoreError::Other(format!("网络请求失败: {e}"))),
+        }
+    }
+    Err(last_err.unwrap_or_else(|| CoreError::Other("网络请求失败".into())))
 }
 
 /* ---------------- skills.sh ---------------- */

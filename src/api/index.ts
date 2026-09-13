@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AdoptReport,
   AgentStatus,
+  ConnectivityResult,
   DeployResult,
   DisabledRecord,
   HealthIssue,
@@ -64,6 +65,18 @@ export function listDisabledMcp(): Promise<DisabledRecord[]> {
 
 export function enableMcp(recordId: number): Promise<WriteReport> {
   return invoke<WriteReport>("enable_mcp", { recordId });
+}
+
+export function testMcp(
+  agentId: string,
+  name: string,
+  scope: string
+): Promise<ConnectivityResult> {
+  return invoke<ConnectivityResult>("test_mcp", { agentId, name, scope });
+}
+
+export function testMcpDef(def: McpServerDef): Promise<ConnectivityResult> {
+  return invoke<ConnectivityResult>("test_mcp_def", { def });
 }
 
 export function listSkills(): Promise<SkillEntry[]> {

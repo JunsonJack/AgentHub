@@ -2,10 +2,10 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Delete, Edit, Refresh, Search, SwitchButton, Upload } from "@element-plus/icons-vue";
+import { Delete, Edit, Link, Refresh, Search, SwitchButton, Upload } from "@element-plus/icons-vue";
 import { useAgentsStore } from "../stores/agents";
-import { deployMcp, disableMcp, enableMcp, listDisabledMcp, removeMcp } from "../api";
-import type { DisabledRecord, McpEntry, McpServerDef } from "../api/types";
+import { deployMcp, disableMcp, enableMcp, listDisabledMcp, removeMcp, testMcp, testMcpDef } from "../api";
+import type { ConnectivityResult, DisabledRecord, McpEntry, McpServerDef } from "../api/types";
 
 const store = useAgentsStore();
 const { mcp, agents, loading, loaded, error } = storeToRefs(store);
@@ -95,6 +95,58 @@ async function onEnable(record: DisabledRecord) {
     await refresh();
   } catch (e) {
     ElMessage.error(String(e));
+  }
+}
+
+/* ---------- 连通性测试 ---------- */
+
+const testingKey = ref("");
+
+function describeResult(r: ConnectivityResult): string {
+  if (r.status === "ok") {
+    const who = [r.serverName, r.serverVersion].filter(Boolean).join(" v");
+    return `连通 ${r.latencyMs}ms${who ? ` · ${who}` : ""}`;
+  }
+  return r.error ?? "失败";
+}
+
+async function onTest(row: McpEntry) {
+  const key = `${row.agentId}|${row.name}|${row.scope}`;
+  testingKey.value = key;
+  try {
+    const r = await testMcp(row.agentId, row.name, row.scope);
+    if (r.status === "ok") {
+      ElMessage.success(`${row.name}：${describeResult(r)}`);
+    } else {
+      ElMessage.error(`${row.name}：${describeResult(r)}`);
+    }
+  } catch (e) {
+    ElMessage.error(`${row.name}：${String(e)}`);
+  } finally {
+    testingKey.value = "";
+  }
+}
+
+async function onTestDef() {
+  let def: McpServerDef;
+  try {
+    def = buildDef();
+  } catch (e) {
+    ElMessage.error(`配置解析失败：${e instanceof Error ? e.message : String(e)}`);
+    return;
+  }
+  testingKey.value = "@drawer";
+  try {
+    const r = await testMcpDef(def);
+    if (r.status === "ok") {
+      ElMessage.success(`测试通过：${describeResult(r)}`);
+    } else {
+      ElMessage.warning(`测试失败：${describeResult(r)}`);
+    }
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    testingKey.value = "";
   }
 }
 
@@ -323,7 +375,7 @@ onMounted(refresh);
           <code class="cmd">{{ row.command ?? row.url ?? "—" }}</code>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="230" fixed="right">
+      <el-table-column label="操作" width="290" fixed="right">
         <template #default="{ row }">
           <el-button
             size="small"
@@ -332,6 +384,12 @@ onMounted(refresh);
             :title="row.scope !== 'global' ? '项目级条目暂不支持编辑，请在对应项目内修改' : ''"
             @click="openEdit(row)"
           >编辑</el-button>
+          <el-button
+            size="small"
+            :icon="Link"
+            :loading="testingKey === `${row.agentId}|${row.name}|${row.scope}`"
+            @click="onTest(row)"
+          >测试</el-button>
           <el-button
             size="small"
             type="warning"
@@ -408,6 +466,7 @@ onMounted(refresh);
         </el-form-item>
 
         <el-button type="primary" class="save-btn" @click="save">保存并下发</el-button>
+        <el-button class="save-btn" :loading="testingKey === '@drawer'" @click="onTestDef">测试连接</el-button>
       </el-form>
     </el-drawer>
   </div>

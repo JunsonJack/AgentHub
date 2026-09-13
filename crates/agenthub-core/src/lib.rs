@@ -14,6 +14,7 @@ pub mod library;
 pub mod market;
 pub mod model;
 pub mod registry;
+pub mod runner;
 pub mod snapshot;
 pub mod store;
 pub mod trash;

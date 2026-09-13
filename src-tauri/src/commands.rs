@@ -152,6 +152,25 @@ pub fn read_skill_md(dir: String) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| e.to_string())
 }
 
+/* ---------- MCP 连通性测试 ---------- */
+
+#[tauri::command]
+pub fn test_mcp(
+    reg: State<Registry>,
+    agent_id: String,
+    name: String,
+    scope: String,
+) -> Result<agenthub_core::runner::ConnectivityResult, String> {
+    Ok(agenthub_core::runner::test_entry(&reg, &agent_id, &name, &scope))
+}
+
+#[tauri::command]
+pub fn test_mcp_def(
+    def: McpServerDef,
+) -> Result<agenthub_core::runner::ConnectivityResult, String> {
+    Ok(agenthub_core::runner::test_def(&def))
+}
+
 /* ---------- Agent 路径覆写 ---------- */
 
 #[tauri::command]

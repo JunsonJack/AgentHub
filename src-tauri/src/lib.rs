@@ -21,6 +21,8 @@ pub fn run() {
             commands::disable_mcp,
             commands::list_disabled_mcp,
             commands::enable_mcp,
+            commands::test_mcp,
+            commands::test_mcp_def,
             commands::list_skills,
             commands::adopt_skill,
             commands::list_library,
