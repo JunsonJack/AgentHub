@@ -11,6 +11,7 @@ import {
   removeSkill,
 } from "../api";
 import type { AdoptReport, LibraryItem, SkillEntry } from "../api/types";
+import { renderMarkdown } from "../utils/markdown";
 
 const activeTab = ref("agents");
 const skills = ref<SkillEntry[]>([]);
@@ -59,6 +60,8 @@ const detailVisible = ref(false);
 const detailTitle = ref("");
 const detailMeta = ref<string[]>([]);
 const detailMd = ref("");
+
+const renderedMd = computed(() => renderMarkdown(detailMd.value));
 
 async function openAgentSkillDetail(s: SkillEntry) {
   detailTitle.value = s.name;
@@ -219,7 +222,8 @@ onMounted(refresh);
       <div class="meta">
         <div v-for="m in detailMeta" :key="m" class="meta-line">{{ m }}</div>
       </div>
-      <pre class="md">{{ detailMd || "（无 SKILL.md 内容）" }}</pre>
+      <div v-if="renderedMd" class="md-body" v-html="renderedMd"></div>
+      <div v-else class="md-empty">（无 SKILL.md 内容）</div>
     </el-drawer>
 
     <el-dialog v-model="adoptDialogVisible" title="收编预览（dry-run）" width="480px">
@@ -259,11 +263,31 @@ onMounted(refresh);
   font-family: Consolas, monospace; word-break: break-all;
   margin-bottom: 4px;
 }
-.md {
-  font-size: 12px; line-height: 1.6;
+.md-body {
+  font-size: 13px; line-height: 1.7;
+  max-height: 70vh; overflow: auto;
+}
+.md-body :deep(h1), .md-body :deep(h2), .md-body :deep(h3) { margin: 14px 0 8px; }
+.md-body :deep(p) { margin: 8px 0; }
+.md-body :deep(ul), .md-body :deep(ol) { padding-left: 20px; margin: 8px 0; }
+.md-body :deep(code) {
+  font-family: Consolas, monospace; font-size: 12px;
+  background: var(--el-fill-color); padding: 1px 5px; border-radius: 4px;
+}
+.md-body :deep(pre) {
   background: var(--el-fill-color-light); border-radius: 6px;
-  padding: 12px; max-height: 65vh; overflow: auto;
-  white-space: pre-wrap; word-break: break-word;
+  padding: 10px; overflow: auto;
+}
+.md-body :deep(pre code) { background: none; padding: 0; }
+.md-body :deep(blockquote) {
+  border-left: 3px solid var(--el-border-color); color: var(--el-text-color-secondary);
+  padding-left: 10px; margin: 8px 0;
+}
+.md-body :deep(table) { border-collapse: collapse; margin: 8px 0; }
+.md-body :deep(th), .md-body :deep(td) { border: 1px solid var(--el-border-color-lighter); padding: 4px 8px; }
+.md-empty {
+  font-size: 12px; color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light); border-radius: 6px; padding: 12px;
 }
 .path { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; }
 .mono :deep(textarea) { font-family: Consolas, monospace; }

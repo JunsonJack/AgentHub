@@ -12,6 +12,7 @@ const { mcp, agents, loading, loaded, error } = storeToRefs(store);
 
 const keyword = ref("");
 const agentFilter = ref("");
+const viewMode = ref<"flat" | "grouped">("flat");
 
 const agentName = (id: string) => agents.value.find((a) => a.id === id)?.name ?? id;
 
@@ -30,6 +31,30 @@ const filtered = computed(() =>
 
 const transportTag = (t: string) => (t === "stdio" ? "success" : t === "unknown" ? "info" : "warning");
 const scopeLabel = (s: string) => (s === "global" ? "全局" : s.startsWith("project:") ? "项目" : s);
+
+/* ---------- 覆盖矩阵（按 server 去重分组） ---------- */
+
+interface GroupedServer {
+  name: string;
+  agents: string[];
+  transports: string[];
+  projectScopes: string[];
+}
+
+const grouped = computed(() => {
+  const map = new Map<string, GroupedServer>();
+  for (const e of filtered.value) {
+    let g = map.get(e.name);
+    if (!g) {
+      g = { name: e.name, agents: [], transports: [], projectScopes: [] };
+      map.set(e.name, g);
+    }
+    if (!g.agents.includes(e.agentId)) g.agents.push(e.agentId);
+    if (!g.transports.includes(e.transport)) g.transports.push(e.transport);
+    if (e.scope !== "global" && !g.projectScopes.includes(e.scope)) g.projectScopes.push(e.scope);
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+});
 
 async function refresh() {
   try {
@@ -218,6 +243,10 @@ onMounted(refresh);
       <el-select v-model="agentFilter" placeholder="全部 Agent" clearable class="agent-select">
         <el-option v-for="a in agents" :key="a.id" :label="a.name" :value="a.id" />
       </el-select>
+      <el-radio-group v-model="viewMode">
+        <el-radio-button value="flat">按 Agent 明细</el-radio-button>
+        <el-radio-button value="grouped">覆盖矩阵</el-radio-button>
+      </el-radio-group>
       <el-button type="primary" :icon="Upload" @click="openNew">新增 / 下发</el-button>
       <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
     </div>
@@ -231,7 +260,44 @@ onMounted(refresh);
       class="mb"
     />
 
-    <el-table :data="filtered" v-loading="loading && !loaded" stripe class="mcp-table">
+    <el-table v-if="viewMode === 'grouped'" :data="grouped" v-loading="loading && !loaded" stripe class="mcp-table">
+      <el-table-column label="Server" min-width="180">
+        <template #default="{ row }">
+          <span class="server-name">{{ row.name }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="覆盖 Agent" min-width="260">
+        <template #default="{ row }">
+          <el-tag
+            v-for="a in row.agents"
+            :key="a"
+            size="small"
+            effect="plain"
+            class="agent-tag"
+          >{{ agentName(a) }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="传输" width="120">
+        <template #default="{ row }">
+          <el-tag
+            v-for="t in row.transports"
+            :key="t"
+            size="small"
+            :type="transportTag(t)"
+            effect="plain"
+            class="agent-tag"
+          >{{ t }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="项目级" width="90">
+        <template #default="{ row }">
+          <el-tag v-if="row.projectScopes.length" size="small" type="warning" effect="plain">×{{ row.projectScopes.length }}</el-tag>
+          <span v-else>—</span>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-table v-else :data="filtered" v-loading="loading && !loaded" stripe class="mcp-table">
       <el-table-column label="Server" min-width="180">
         <template #default="{ row }">
           <span class="server-name">{{ row.name }}</span>
@@ -362,4 +428,5 @@ onMounted(refresh);
 .save-btn { width: 100%; }
 .disabled-section { margin-top: 20px; }
 .disabled-head { font-weight: 600; margin-bottom: 10px; }
+.agent-tag { margin-right: 6px; margin-bottom: 2px; }
 </style>

@@ -12,7 +12,9 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
     "@tauri-apps/api": "^2.5.0",
+    "dompurify": "^3.4.15",
     "element-plus": "^2.9.0",
+    "marked": "^18.0.13",
     "pinia": "^3.0.0",
     "vue": "^3.5.0",
     "vue-router": "^4.5.0"
