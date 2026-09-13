@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["src-tauri", "crates/agenthub-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+# preserve_order: 改写配置文件时保持键序，配合"格式保留写入"红线
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

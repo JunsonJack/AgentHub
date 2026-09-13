@@ -1,0 +1,19 @@
+[package]
+name = "agenthub-core"
+description = "AgentHub 与框架解耦的核心层：Connector、数据模型、快照、存储"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# 读：简单值模型；写：toml_edit 保留注释与排版（规划红线）
+toml = "0.8"
+toml_edit = "0.22"
+rusqlite = { version = "0.32", features = ["bundled"] }
+dirs = "5"
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "kind": "cli",
+      "mcpConfigPaths": {
+        "windows": ["~/.claude.json"],
+        "macos": ["~/.claude.json"],
+        "linux": ["~/.claude.json"]
+      },
+      "skillDirs": {
+        "windows": ["~/.claude/skills"],
+        "macos": ["~/.claude/skills"],
+        "linux": ["~/.claude/skills"]
+      },
+      "reload": "restart"
+    },
+    {
+      "id": "zcode",
+      "name": "ZCode",
+      "kind": "cli",
+      "mcpConfigPaths": {
+        "windows": ["~/.zcode/cli/config.json"],
+        "macos": ["~/.zcode/cli/config.json"],
+        "linux": ["~/.zcode/cli/config.json"]
+      },
+      "skillDirs": {
+        "windows": ["~/.zcode/skills", "~/.agents/skills"],
+        "macos": ["~/.zcode/skills", "~/.agents/skills"],
+        "linux": ["~/.zcode/skills", "~/.agents/skills"]
+      },
+      "reload": "restart"
+    },
+    {
+      "id": "codex",
+      "name": "Codex CLI",
+      "kind": "cli",
+      "mcpConfigPaths": {
+        "windows": ["~/.codex/config.toml"],
+        "macos": ["~/.codex/config.toml"],
+        "linux": ["~/.codex/config.toml"]
+      },
+      "skillDirs": {
+        "windows": ["~/.codex/skills"],
+        "macos": ["~/.codex/skills"],
+        "linux": ["~/.codex/skills"]
+      },
+      "reload": "restart"
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "kind": "ide",
+      "mcpConfigPaths": {
+        "windows": ["~/.cursor/mcp.json"],
+        "macos": ["~/.cursor/mcp.json"],
+        "linux": ["~/.cursor/mcp.json"]
+      },
+      "skillDirs": {
+        "windows": ["~/.cursor/skills"],
+        "macos": ["~/.cursor/skills"],
+        "linux": ["~/.cursor/skills"]
+      },
+      "reload": "restart"
+    },
+    {
+      "id": "gemini-cli",
+      "name": "Gemini CLI",
+      "kind": "cli",
+      "mcpConfigPaths": {
+        "windows": ["~/.gemini/settings.json"],
+        "macos": ["~/.gemini/settings.json"],
+        "linux": ["~/.gemini/settings.json"]
+      },
+      "skillDirs": { "windows": [], "macos": [], "linux": [] },
+      "reload": "restart"
+    },
+    {
+      "id": "claude-desktop",
+      "name": "Claude Desktop",
+      "kind": "desktop",
+      "mcpConfigPaths": {
+        "windows": ["~/AppData/Roaming/Claude/claude_desktop_config.json"],
+        "macos": ["~/Library/Application Support/Claude/claude_desktop_config.json"],
+        "linux": []
+      },
+      "skillDirs": { "windows": [], "macos": [], "linux": [] },
+      "reload": "restart"
+    }
+  ]
+}
