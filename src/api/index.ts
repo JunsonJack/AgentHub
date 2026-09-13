@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AdoptReport,
   AgentStatus,
+  CollectionEntry,
   ConnectivityResult,
   DeployResult,
   DisabledRecord,
@@ -13,6 +14,9 @@ import type {
   MarketSkill,
   McpEntry,
   McpServerDef,
+  ProfileApplyResult,
+  ProfileItem,
+  ProfileMeta,
   SkillEntry,
   SnapshotMeta,
   TrashItem,
@@ -192,4 +196,56 @@ export function getPathOverrides(): Promise<string> {
 
 export function setPathOverrides(raw: string): Promise<void> {
   return invoke<void>("set_path_overrides", { raw });
+}
+
+/* ---------- 收藏集 ---------- */
+
+export function listCollection(): Promise<CollectionEntry[]> {
+  return invoke<CollectionEntry[]>("list_collection");
+}
+
+export function listCurated(): Promise<CollectionEntry[]> {
+  return invoke<CollectionEntry[]>("list_curated");
+}
+
+export function addCollectionItem(entry: CollectionEntry): Promise<number> {
+  return invoke<number>("add_collection_item", { entry });
+}
+
+export function updateCollectionItem(entry: CollectionEntry): Promise<void> {
+  return invoke<void>("update_collection_item", { entry });
+}
+
+export function deleteCollectionItem(id: number): Promise<void> {
+  return invoke<void>("delete_collection_item", { id });
+}
+
+/* ---------- 配置 Profile ---------- */
+
+export function listProfiles(): Promise<ProfileMeta[]> {
+  return invoke<ProfileMeta[]>("list_profiles");
+}
+
+export function listProfileItems(profileId: number): Promise<ProfileItem[]> {
+  return invoke<ProfileItem[]>("list_profile_items", { profileId });
+}
+
+export function createProfile(
+  name: string,
+  skills: string[],
+  mcps: McpEntry[]
+): Promise<number> {
+  return invoke<number>("create_profile", { name, skills, mcps });
+}
+
+export function deleteProfile(id: number): Promise<void> {
+  return invoke<void>("delete_profile", { id });
+}
+
+export function applyProfile(
+  profileId: number,
+  agentIds: string[],
+  overwrite: boolean
+): Promise<ProfileApplyResult[]> {
+  return invoke<ProfileApplyResult[]>("apply_profile", { profileId, agentIds, overwrite });
 }

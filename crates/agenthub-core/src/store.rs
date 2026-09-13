@@ -40,6 +40,20 @@ CREATE TABLE IF NOT EXISTS disabled_mcp (
     def_json    TEXT NOT NULL,
     disabled_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS profiles (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS profile_items (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL,
+    kind       TEXT NOT NULL,
+    ref_name   TEXT NOT NULL,
+    def_json   TEXT NOT NULL DEFAULT '{}'
+);
 "#;
 
 pub struct Store {
@@ -138,6 +152,137 @@ impl Store {
         self.conn
             .execute("DELETE FROM disabled_mcp WHERE id = ?1", [id])?;
         Ok(Some(found))
+    }
+
+    /* ---------- 收藏集用户条目 ---------- */
+
+    pub fn add_collection_item(
+        &self,
+        kind: &str,
+        name: &str,
+        source: &str,
+        tags_json: &str,
+        note: &str,
+        stars: i64,
+    ) -> Result<i64> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        self.conn.execute(
+            "INSERT INTO collection_items(kind, name, source, tags, note, stars, created_at)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![kind, name, source, tags_json, note, stars, now],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn list_collection_items(
+        &self,
+    ) -> Result<Vec<(i64, String, String, String, String, String, i64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, kind, name, source, tags, note, stars FROM collection_items ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get::<_, Option<String>>(4)?.unwrap_or_else(|| "[]".into()),
+                r.get::<_, Option<String>>(5)?.unwrap_or_default(),
+                r.get(6)?,
+            ))
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub fn update_collection_item(
+        &self,
+        id: i64,
+        name: &str,
+        source: &str,
+        tags_json: &str,
+        note: &str,
+        stars: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE collection_items SET name=?2, source=?3, tags=?4, note=?5, stars=?6 WHERE id=?1",
+            rusqlite::params![id, name, source, tags_json, note, stars],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_collection_item(&self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM collection_items WHERE id=?1", [id])?;
+        Ok(())
+    }
+
+    /* ---------- 配置 Profile ---------- */
+
+    pub fn add_profile(&self, name: &str) -> Result<i64> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        self.conn.execute(
+            "INSERT INTO profiles(name, created_at) VALUES(?1, ?2)",
+            rusqlite::params![name, now],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn list_profiles(&self) -> Result<Vec<(i64, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, name FROM profiles ORDER BY created_at DESC")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub fn delete_profile(&self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM profile_items WHERE profile_id=?1", [id])?;
+        self.conn.execute("DELETE FROM profiles WHERE id=?1", [id])?;
+        Ok(())
+    }
+
+    /// 追加一条 profile 项：kind = skill（ref_name=中央库名）| mcp（ref_name=server 名，def_json=完整定义）
+    pub fn add_profile_item(
+        &self,
+        profile_id: i64,
+        kind: &str,
+        ref_name: &str,
+        def_json: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO profile_items(profile_id, kind, ref_name, def_json) VALUES(?1, ?2, ?3, ?4)",
+            rusqlite::params![profile_id, kind, ref_name, def_json],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_profile_items(
+        &self,
+        profile_id: i64,
+    ) -> Result<Vec<(i64, String, String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, kind, ref_name, def_json FROM profile_items WHERE profile_id=?1 ORDER BY id",
+        )?;
+        let rows = stmt.query_map([profile_id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub fn delete_profile_item(&self, item_id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM profile_items WHERE id=?1", [item_id])?;
+        Ok(())
     }
 }
 

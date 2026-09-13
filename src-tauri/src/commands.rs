@@ -171,7 +171,153 @@ pub fn test_mcp_def(
     Ok(agenthub_core::runner::test_def(&def))
 }
 
-/* ---------- Agent 路径覆写 ---------- */
+/* ---------- 收藏集 ---------- */
+
+#[tauri::command]
+pub fn list_collection() -> Result<Vec<agenthub_core::collection::CollectionEntry>, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    agenthub_core::collection::list_items(&store).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_curated() -> Result<Vec<agenthub_core::collection::CollectionEntry>, String> {
+    Ok(agenthub_core::collection::list_curated())
+}
+
+#[tauri::command]
+pub fn add_collection_item(
+    entry: agenthub_core::collection::CollectionEntry,
+) -> Result<i64, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    agenthub_core::collection::add_item(&store, &entry).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_collection_item(
+    entry: agenthub_core::collection::CollectionEntry,
+) -> Result<(), String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    agenthub_core::collection::update_item(&store, &entry).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_collection_item(id: i64) -> Result<(), String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    agenthub_core::collection::delete_item(&store, id).map_err(|e| e.to_string())
+}
+
+/* ---------- 配置 Profile ---------- */
+
+#[tauri::command]
+pub fn list_profiles() -> Result<Vec<agenthub_core::model::ProfileMeta>, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    Ok(store
+        .list_profiles()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, name)| agenthub_core::model::ProfileMeta { id, name })
+        .collect())
+}
+
+#[tauri::command]
+pub fn list_profile_items(
+    profile_id: i64,
+) -> Result<Vec<agenthub_core::model::ProfileItem>, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    Ok(store
+        .list_profile_items(profile_id)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, kind, ref_name, def_json)| agenthub_core::model::ProfileItem {
+            id,
+            kind,
+            ref_name,
+            def: serde_json::from_str(&def_json).unwrap_or(serde_json::Value::Null),
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn create_profile(
+    name: String,
+    skills: Vec<String>,
+    mcps: Vec<McpEntry>,
+) -> Result<i64, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    let pid = store.add_profile(&name).map_err(|e| e.to_string())?;
+    for s in &skills {
+        store
+            .add_profile_item(pid, "skill", s, "{}")
+            .map_err(|e| e.to_string())?;
+    }
+    for m in &mcps {
+        store
+            .add_profile_item(pid, "mcp", &m.name, &m.raw.to_string())
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(pid)
+}
+
+#[tauri::command]
+pub fn delete_profile(id: i64) -> Result<(), String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    store.delete_profile(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn apply_profile(
+    reg: State<Registry>,
+    profile_id: i64,
+    agent_ids: Vec<String>,
+    overwrite: bool,
+) -> Result<Vec<agenthub_core::model::ProfileApplyResult>, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    let items = store
+        .list_profile_items(profile_id)
+        .map_err(|e| e.to_string())?;
+    let mut out = vec![];
+    for (_, kind, ref_name, def_json) in items {
+        match kind.as_str() {
+            "skill" => {
+                for r in reg.deploy_skill(&ref_name, &agent_ids, overwrite) {
+                    out.push(agenthub_core::model::ProfileApplyResult {
+                        kind: "skill".into(),
+                        name: ref_name.clone(),
+                        agent_id: r.agent_id,
+                        ok: r.ok,
+                        error: r.error,
+                    });
+                }
+            }
+            "mcp" => {
+                let def: McpServerDef = match serde_json::from_str(&def_json) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        out.push(agenthub_core::model::ProfileApplyResult {
+                            kind: "mcp".into(),
+                            name: ref_name.clone(),
+                            agent_id: agent_ids.join(","),
+                            ok: false,
+                            error: Some(format!("定义解析失败: {e}")),
+                        });
+                        continue;
+                    }
+                };
+                for r in reg.deploy_mcp(&agent_ids, &ref_name, &def) {
+                    out.push(agenthub_core::model::ProfileApplyResult {
+                        kind: "mcp".into(),
+                        name: ref_name.clone(),
+                        agent_id: r.agent_id,
+                        ok: r.ok,
+                        error: r.error,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(out)
+}
 
 #[tauri::command]
 pub fn get_path_overrides() -> Result<String, String> {

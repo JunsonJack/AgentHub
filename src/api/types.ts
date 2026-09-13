@@ -145,3 +145,34 @@ export interface ConnectivityResult {
   serverVersion: string | null;
   error: string | null;
 }
+
+export interface CollectionEntry {
+  id: number | null;
+  kind: string;
+  name: string;
+  source: string;
+  tags: string[];
+  note: string;
+  stars: number;
+  builtIn: boolean;
+}
+
+export interface ProfileMeta {
+  id: number;
+  name: string;
+}
+
+export interface ProfileItem {
+  id: number;
+  kind: "skill" | "mcp";
+  refName: string;
+  def: Record<string, unknown>;
+}
+
+export interface ProfileApplyResult {
+  kind: string;
+  name: string;
+  agentId: string;
+  ok: boolean;
+  error: string | null;
+}

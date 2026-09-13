@@ -179,6 +179,37 @@ pub struct HealthIssue {
     pub path: Option<String>,
 }
 
+/* ---------- 配置 Profile（P1 第 8 项） ---------- */
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileMeta {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileItem {
+    pub id: i64,
+    /// "skill" | "mcp"
+    pub kind: String,
+    /// skill：中央库名；mcp：server 名
+    pub ref_name: String,
+    /// mcp 条目的完整定义；skill 为 {}
+    pub def: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileApplyResult {
+    pub kind: String,
+    pub name: String,
+    pub agent_id: String,
+    pub ok: bool,
+    pub error: Option<String>,
+}
+
 /// 市场安装结果：入库报告 + 各 Agent 部署结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

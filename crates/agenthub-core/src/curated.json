@@ -1,0 +1,40 @@
+{
+  "items": [
+    {
+      "name": "git-commit",
+      "source": "skills.sh:github/awesome-copilot/git-commit",
+      "tags": ["git", "提交"],
+      "note": "规范化提交信息生成（skills.sh 44k+ 安装，真机握手通过）"
+    },
+    {
+      "name": "git-guardrails-claude-code",
+      "source": "skills.sh:mattpocock/skills/git-guardrails-claude-code",
+      "tags": ["git", "安全"],
+      "note": "git 操作护栏（skills.sh 351k+ 安装）"
+    },
+    {
+      "name": "using-git-worktrees",
+      "source": "skills.sh:obra/superpowers/using-git-worktrees",
+      "tags": ["git", "工作流"],
+      "note": "git worktree 并行工作流（skills.sh 188k+ 安装）"
+    },
+    {
+      "name": "github-issues",
+      "source": "skills.sh:github/awesome-copilot/github-issues",
+      "tags": ["github", "协作"],
+      "note": "GitHub issue 处理（官方 awesome-copilot 合集）"
+    },
+    {
+      "name": "agent-skills",
+      "source": "git:https://github.com/vercel-labs/agent-skills",
+      "tags": ["vercel", "官方合集"],
+      "note": "Vercel 官方 skills 合集（Agent Skills 格式的参照实现）"
+    },
+    {
+      "name": "browser-automation",
+      "source": "git:https://github.com/openclaw/openclaw/tree/main/extensions/browser/skills/browser-automation",
+      "tags": ["browser", "自动化"],
+      "note": "浏览器自动化（SkillsMP 389k 星仓库；真机 sparse clone 安装验证通过）"
+    }
+  ]
+}

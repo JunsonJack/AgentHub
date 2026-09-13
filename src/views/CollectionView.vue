@@ -1,24 +1,133 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
-import { Download, Link, Refresh, Search, View } from "@element-plus/icons-vue";
+import { Delete, Download, Edit, FolderAdd, Link, Refresh, Search, View } from "@element-plus/icons-vue";
 import { useAgentsStore } from "../stores/agents";
 import { storeToRefs } from "pinia";
 import {
+  addCollectionItem,
   deployLibrarySkill,
+  deleteCollectionItem,
+  listCollection,
+  listCurated,
   listLibrary,
   marketInstallGit,
   marketInstallSkillsSh,
   marketPreview,
   marketSearch,
+  updateCollectionItem,
 } from "../api";
-import type { AdoptReport, DeployResult, LibraryItem, MarketPreview, MarketSkill } from "../api/types";
+import type { AdoptReport, CollectionEntry, DeployResult, LibraryItem, MarketPreview, MarketSkill } from "../api/types";
 
 const agentsStore = useAgentsStore();
 const { agents } = storeToRefs(agentsStore);
 const installedAgents = computed(() => agents.value.filter((a) => a.installed));
 
 const activeTab = ref("market");
+
+/* ---------- 收藏集 ---------- */
+
+const curated = ref<CollectionEntry[]>([]);
+const myItems = ref<CollectionEntry[]>([]);
+const collectionLoading = ref(false);
+const itemDialogVisible = ref(false);
+const itemSaving = ref(false);
+const itemForm = reactive({
+  id: null as number | null,
+  kind: "skill",
+  name: "",
+  source: "",
+  tags: "",
+  note: "",
+  stars: 0,
+});
+
+async function refreshCollection() {
+  collectionLoading.value = true;
+  try {
+    const [c, u] = await Promise.all([listCurated(), listCollection()]);
+    curated.value = c;
+    myItems.value = u;
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    collectionLoading.value = false;
+  }
+}
+
+function openNewItem() {
+  Object.assign(itemForm, { id: null, kind: "skill", name: "", source: "", tags: "", note: "", stars: 0 });
+  itemDialogVisible.value = true;
+}
+
+function openEditItem(entry: CollectionEntry) {
+  Object.assign(itemForm, {
+    id: entry.id,
+    kind: entry.kind,
+    name: entry.name,
+    source: entry.source,
+    tags: entry.tags.join(", "),
+    note: entry.note,
+    stars: entry.stars,
+  });
+  itemDialogVisible.value = true;
+}
+
+async function saveItem() {
+  if (!itemForm.name.trim() || !itemForm.source.trim()) {
+    ElMessage.warning("名称与来源必填");
+    return;
+  }
+  itemSaving.value = true;
+  try {
+    const entry: CollectionEntry = {
+      id: itemForm.id,
+      kind: itemForm.kind,
+      name: itemForm.name.trim(),
+      source: itemForm.source.trim(),
+      tags: itemForm.tags.split(/[,，]/).map((t) => t.trim()).filter(Boolean),
+      note: itemForm.note.trim(),
+      stars: Number(itemForm.stars) || 0,
+      builtIn: false,
+    };
+    if (entry.id == null) {
+      await addCollectionItem(entry);
+      ElMessage.success("已添加");
+    } else {
+      await updateCollectionItem(entry);
+      ElMessage.success("已更新");
+    }
+    itemDialogVisible.value = false;
+    await refreshCollection();
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    itemSaving.value = false;
+  }
+}
+
+async function removeItem(entry: CollectionEntry) {
+  try {
+    await deleteCollectionItem(entry.id!);
+    ElMessage.success("已删除");
+    await refreshCollection();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+/** 按来源前缀路由到对应安装通道 */
+function installFromCollection(entry: CollectionEntry) {
+  if (entry.source.startsWith("skills.sh:")) {
+    openInstall("skills_sh", entry.source.slice("skills.sh:".length), entry.name);
+  } else if (entry.source.startsWith("git:")) {
+    openInstall("git", entry.source.slice("git:".length), entry.name);
+  } else if (entry.source.startsWith("library:")) {
+    openInstall("library", entry.source.slice("library:".length), entry.name);
+  } else {
+    ElMessage.info("该条目无安装引用，仅作编目记录");
+  }
+}
 
 /* ---------- 搜索 ---------- */
 
@@ -170,6 +279,7 @@ const agentName = (id: string) => agents.value.find((a) => a.id === id)?.name ??
 onMounted(() => {
   agentsStore.fetchAll().catch(() => undefined);
   refreshLibrary();
+  refreshCollection();
 });
 </script>
 
@@ -284,7 +394,96 @@ onMounted(() => {
           <template #empty>中央库还是空的——去市场安装，或在 Skill 中心收编现有 skill</template>
         </el-table>
       </el-tab-pane>
+      <el-tab-pane :label="`收藏集（${curated.length}+${myItems.length}）`" name="collection">
+        <el-alert
+          title="内置精选随软件版本更新（条目均经真机验证）；「我的条目」保存在本机 SQLite"
+          type="info"
+          :closable="false"
+          class="mb"
+        />
+        <div class="lib-toolbar">
+          <span class="section-sub">内置精选</span>
+        </div>
+        <el-table :data="curated" v-loading="collectionLoading" stripe size="small" class="mb">
+          <el-table-column prop="name" label="Skill" min-width="150" />
+          <el-table-column label="标签" min-width="140">
+            <template #default="{ row }">
+              <el-tag v-for="t in row.tags" :key="t" size="small" effect="plain" class="agent-tag">{{ t }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="note" label="说明" min-width="260" />
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" type="primary" plain :icon="Download" @click="installFromCollection(row)">安装</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="lib-toolbar">
+          <span class="section-sub">我的条目</span>
+          <el-button size="small" type="primary" :icon="FolderAdd" @click="openNewItem">添加条目</el-button>
+        </div>
+        <el-table :data="myItems" v-loading="collectionLoading" stripe size="small">
+          <el-table-column prop="name" label="名称" min-width="140" />
+          <el-table-column prop="kind" label="类型" width="80" />
+          <el-table-column prop="source" label="来源" min-width="220">
+            <template #default="{ row }">
+              <code class="cmd">{{ row.source }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column label="标签" min-width="120">
+            <template #default="{ row }">
+              <el-tag v-for="t in row.tags" :key="t" size="small" effect="plain" class="agent-tag">{{ t }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="星级" width="120">
+            <template #default="{ row }">
+              <el-rate :model-value="row.stars" disabled size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="180" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" :icon="Download" @click="installFromCollection(row)">安装</el-button>
+              <el-button size="small" :icon="Edit" @click="openEditItem(row)" />
+              <el-button size="small" type="danger" plain :icon="Delete" @click="removeItem(row)" />
+            </template>
+          </el-table-column>
+          <template #empty>还没有自定义条目——工具、仓库、常用组合都可以编目在这里</template>
+        </el-table>
+      </el-tab-pane>
     </el-tabs>
+
+    <!-- 收藏条目编辑对话框 -->
+    <el-dialog v-model="itemDialogVisible" :title="itemForm.id == null ? '添加收藏条目' : '编辑收藏条目'" width="460px">
+      <el-form label-position="top">
+        <el-form-item label="类型">
+          <el-radio-group v-model="itemForm.kind">
+            <el-radio-button value="skill">skill</el-radio-button>
+            <el-radio-button value="mcp">mcp</el-radio-button>
+            <el-radio-button value="tool">tool</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="名称" required>
+          <el-input v-model="itemForm.name" />
+        </el-form-item>
+        <el-form-item label="来源引用（skills.sh:xxx / git:URL / library:名称）" required>
+          <el-input v-model="itemForm.source" placeholder="git:https://github.com/owner/repo" />
+        </el-form-item>
+        <el-form-item label="标签（逗号分隔）">
+          <el-input v-model="itemForm.tags" placeholder="git, 提交" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="itemForm.note" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="星级">
+          <el-rate v-model="itemForm.stars" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="itemDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="itemSaving" @click="saveItem">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- skills.sh 详情抽屉 -->
     <el-drawer v-model="previewVisible" :title="previewTitle" size="480px">
@@ -353,7 +552,8 @@ onMounted(() => {
   padding: 12px; max-height: 40vh; overflow: auto; margin-bottom: 14px;
 }
 .w-full { width: 100%; }
-.lib-toolbar { margin-bottom: 10px; }
+.lib-toolbar { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+.section-sub { font-weight: 600; }
 .hint { font-size: 12px; color: var(--el-text-color-secondary); }
 .deploy-line { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .deploy-err { font-size: 12px; color: var(--el-text-color-secondary); word-break: break-all; }

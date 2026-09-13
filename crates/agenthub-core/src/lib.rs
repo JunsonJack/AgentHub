@@ -7,6 +7,7 @@
 //! - `snapshot`  —— 任何写配置前的自动备份（安全网）
 //! - `store`     —— SQLite（条目、绑定、快照、收藏元数据）
 
+pub mod collection;
 pub mod connector;
 pub mod error;
 pub mod health;
