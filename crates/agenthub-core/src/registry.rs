@@ -177,6 +177,38 @@ impl Registry {
         crate::trash::trash_dir_in(trash_root, std::path::Path::new(&entry.dir), agent_id)
     }
 
+    /// 禁用 MCP：移出配置文件（走快照）+ 完整定义记入本地禁用清单
+    pub fn disable_mcp(
+        &self,
+        store: &crate::store::Store,
+        agent_id: &str,
+        name: &str,
+        scope: &str,
+    ) -> Result<connector::WriteReport> {
+        let c = self.find(agent_id)?;
+        let entry = c
+            .list_mcp()?
+            .into_iter()
+            .find(|e| e.name == name && e.scope == scope)
+            .ok_or_else(|| CoreError::NotFound(format!("{name} @ {agent_id}/{scope}")))?;
+        let report = c.remove_mcp(name, scope)?;
+        store.add_disabled_mcp(agent_id, name, scope, &entry.raw)?;
+        Ok(report)
+    }
+
+    /// 启用：从禁用清单取出记录，把原始定义写回 Agent（同名条目会被覆盖）
+    pub fn enable_mcp(
+        &self,
+        store: &crate::store::Store,
+        record_id: i64,
+    ) -> Result<connector::WriteReport> {
+        let record = store
+            .take_disabled_mcp(record_id)?
+            .ok_or_else(|| CoreError::NotFound(format!("禁用记录 {record_id}")))?;
+        let def: McpServerDef = serde_json::from_value(record.def)?;
+        self.find(&record.agent_id)?.upsert_mcp(&record.name, &def)
+    }
+
     /// 把中央库里的 skill 复制安装到多个 Agent 的用户级 skill 目录。
     /// 目标已存在且 !overwrite 时拒绝（绝不代删）。
     pub fn deploy_skill(

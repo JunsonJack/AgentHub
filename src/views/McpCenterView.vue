@@ -2,10 +2,10 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Delete, Edit, Refresh, Search, Upload } from "@element-plus/icons-vue";
+import { Delete, Edit, Refresh, Search, SwitchButton, Upload } from "@element-plus/icons-vue";
 import { useAgentsStore } from "../stores/agents";
-import { deployMcp, removeMcp } from "../api";
-import type { McpEntry, McpServerDef } from "../api/types";
+import { deployMcp, disableMcp, enableMcp, listDisabledMcp, removeMcp } from "../api";
+import type { DisabledRecord, McpEntry, McpServerDef } from "../api/types";
 
 const store = useAgentsStore();
 const { mcp, agents, loading, loaded, error } = storeToRefs(store);
@@ -34,8 +34,42 @@ const scopeLabel = (s: string) => (s === "global" ? "全局" : s.startsWith("pro
 async function refresh() {
   try {
     await store.fetchAll();
+    disabled.value = await listDisabledMcp();
   } catch {
     ElMessage.error(error.value || "读取 MCP 配置失败");
+  }
+}
+
+/* ---------- 禁用 / 启用 ---------- */
+
+const disabled = ref<DisabledRecord[]>([]);
+
+async function onDisable(entry: McpEntry) {
+  try {
+    await ElMessageBox.confirm(
+      `禁用将从 ${agentName(entry.agentId)} 的配置中移除 ${entry.name}（完整定义会记录在本地禁用清单，随时可一键还原；移除前自动快照）。`,
+      "确认禁用",
+      { type: "warning", confirmButtonText: "禁用", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  try {
+    await disableMcp(entry.agentId, entry.name, entry.scope);
+    ElMessage.success("已禁用，可在下方禁用清单中还原");
+    await refresh();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+async function onEnable(record: DisabledRecord) {
+  try {
+    await enableMcp(record.id);
+    ElMessage.success(`已还原 ${record.name} 到 ${agentName(record.agentId)}`);
+    await refresh();
+  } catch (e) {
+    ElMessage.error(String(e));
   }
 }
 
@@ -223,7 +257,7 @@ onMounted(refresh);
           <code class="cmd">{{ row.command ?? row.url ?? "—" }}</code>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="140" fixed="right">
+      <el-table-column label="操作" width="230" fixed="right">
         <template #default="{ row }">
           <el-button
             size="small"
@@ -232,6 +266,14 @@ onMounted(refresh);
             :title="row.scope !== 'global' ? '项目级条目暂不支持编辑，请在对应项目内修改' : ''"
             @click="openEdit(row)"
           >编辑</el-button>
+          <el-button
+            size="small"
+            type="warning"
+            plain
+            :icon="SwitchButton"
+            :disabled="row.scope !== 'global'"
+            @click="onDisable(row)"
+          >禁用</el-button>
           <el-button
             size="small"
             type="danger"
@@ -243,6 +285,24 @@ onMounted(refresh);
         </template>
       </el-table-column>
     </el-table>
+
+    <div v-if="disabled.length" class="disabled-section">
+      <div class="disabled-head">已禁用条目（{{ disabled.length }}）</div>
+      <el-table :data="disabled" size="small" stripe>
+        <el-table-column prop="name" label="Server" min-width="160" />
+        <el-table-column label="Agent" width="130">
+          <template #default="{ row }">{{ agentName(row.agentId) }}</template>
+        </el-table-column>
+        <el-table-column label="禁用时间" width="170">
+          <template #default="{ row }">{{ new Date(row.disabledAt).toLocaleString("zh-CN", { hour12: false }) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" type="success" plain :icon="SwitchButton" @click="onEnable(row)">还原</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
     <el-drawer v-model="drawerVisible" :title="isNew ? '新增 MCP server 并下发' : `编辑：${form.name}`" size="520px">
       <el-form label-position="top">
@@ -300,4 +360,6 @@ onMounted(refresh);
 }
 .mono :deep(textarea) { font-family: Consolas, monospace; }
 .save-btn { width: 100%; }
+.disabled-section { margin-top: 20px; }
+.disabled-head { font-weight: 600; margin-bottom: 10px; }
 </style>

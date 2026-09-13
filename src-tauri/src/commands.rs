@@ -41,6 +41,30 @@ pub fn remove_mcp(
 }
 
 #[tauri::command]
+pub fn disable_mcp(
+    reg: State<Registry>,
+    agent_id: String,
+    name: String,
+    scope: String,
+) -> Result<agenthub_core::connector::WriteReport, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    reg.disable_mcp(&store, &agent_id, &name, &scope)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_disabled_mcp() -> Result<Vec<agenthub_core::store::DisabledRecord>, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    store.list_disabled_mcp().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn enable_mcp(reg: State<Registry>, record_id: i64) -> Result<agenthub_core::connector::WriteReport, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    reg.enable_mcp(&store, record_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn list_skills(reg: State<Registry>) -> Result<Vec<SkillEntry>, String> {
     Ok(reg.all_skills())
 }

@@ -127,3 +127,12 @@ export interface TrashItem {
   name: string;
   deletedAt: number;
 }
+
+export interface DisabledRecord {
+  id: number;
+  agentId: string;
+  name: string;
+  scope: string;
+  def: Record<string, unknown>;
+  disabledAt: number;
+}

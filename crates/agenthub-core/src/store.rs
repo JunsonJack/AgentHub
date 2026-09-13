@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS collection_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_collection_kind ON collection_items(kind);
+
+CREATE TABLE IF NOT EXISTS disabled_mcp (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id    TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    scope       TEXT NOT NULL,
+    def_json    TEXT NOT NULL,
+    disabled_at INTEGER NOT NULL
+);
 "#;
 
 pub struct Store {
@@ -79,4 +88,68 @@ impl Store {
         self.conn.execute("DELETE FROM settings WHERE key = ?1", [key])?;
         Ok(())
     }
+
+    /* ---------- MCP 禁用清单（移出配置 + 记录，启用时还原） ---------- */
+
+    pub fn add_disabled_mcp(
+        &self,
+        agent_id: &str,
+        name: &str,
+        scope: &str,
+        def_json: &serde_json::Value,
+    ) -> Result<i64> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        self.conn.execute(
+            "INSERT INTO disabled_mcp(agent_id, name, scope, def_json, disabled_at)
+             VALUES(?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![agent_id, name, scope, def_json.to_string(), now],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn list_disabled_mcp(&self) -> Result<Vec<DisabledRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, agent_id, name, scope, def_json, disabled_at FROM disabled_mcp ORDER BY disabled_at DESC")?;
+        let rows = stmt.query_map([], |r| {
+            Ok(DisabledRecord {
+                id: r.get(0)?,
+                agent_id: r.get(1)?,
+                name: r.get(2)?,
+                scope: r.get(3)?,
+                def: serde_json::from_str(&r.get::<_, String>(4)?)
+                    .unwrap_or(serde_json::Value::Null),
+                disabled_at: r.get(5)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// 取出并删除一条禁用记录（启用时还原用）
+    pub fn take_disabled_mcp(&self, id: i64) -> Result<Option<DisabledRecord>> {
+        let all = self.list_disabled_mcp()?;
+        let found = match all.into_iter().find(|r| r.id == id) {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+        self.conn
+            .execute("DELETE FROM disabled_mcp WHERE id = ?1", [id])?;
+        Ok(Some(found))
+    }
+}
+
+/// 已禁用 MCP 条目的记录
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisabledRecord {
+    pub id: i64,
+    pub agent_id: String,
+    pub name: String,
+    pub scope: String,
+    /// 原始定义（含未知字段），启用时原样还原
+    pub def: serde_json::Value,
+    pub disabled_at: i64,
 }

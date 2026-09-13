@@ -3,6 +3,7 @@ import type {
   AdoptReport,
   AgentStatus,
   DeployResult,
+  DisabledRecord,
   HealthIssue,
   InstallOutcome,
   KeyStatus,
@@ -47,6 +48,22 @@ export function removeMcp(
   scope: string
 ): Promise<WriteReport> {
   return invoke<WriteReport>("remove_mcp", { agentId, name, scope });
+}
+
+export function disableMcp(
+  agentId: string,
+  name: string,
+  scope: string
+): Promise<WriteReport> {
+  return invoke<WriteReport>("disable_mcp", { agentId, name, scope });
+}
+
+export function listDisabledMcp(): Promise<DisabledRecord[]> {
+  return invoke<DisabledRecord[]>("list_disabled_mcp");
+}
+
+export function enableMcp(recordId: number): Promise<WriteReport> {
+  return invoke<WriteReport>("enable_mcp", { recordId });
 }
 
 export function listSkills(): Promise<SkillEntry[]> {
