@@ -14,6 +14,9 @@ toml = "0.8"
 toml_edit = "0.22"
 rusqlite = { version = "0.32", features = ["bundled"] }
 dirs = "5"
+# 市场 HTTP（rustls，避免 OpenSSL 依赖）
+ureq = { version = "2", features = ["json"] }
+urlencoding = "2"
 
 [dev-dependencies]
 tempfile = "3"

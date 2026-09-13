@@ -1,4 +1,7 @@
-use agenthub_core::model::{AgentStatus, DeployResult, McpEntry, McpServerDef, SkillEntry, SnapshotMeta};
+use agenthub_core::model::{
+    AgentStatus, DeployResult, InstallOutcome, MarketPreview, MarketSkill, McpEntry, McpServerDef,
+    SkillEntry, SnapshotMeta,
+};
 use agenthub_core::registry::Registry;
 use tauri::State;
 
@@ -79,4 +82,103 @@ pub fn read_skill_md(dir: String) -> Result<String, String> {
         return Ok(String::new());
     }
     std::fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
+/* ---------- 市场与收藏 ---------- */
+
+const SKILLSMP_KEY_SETTING: &str = "skillsmp_api_key";
+
+#[tauri::command]
+pub fn market_search(source: String, q: String, limit: u32) -> Result<Vec<MarketSkill>, String> {
+    let key = skillsmp_key();
+    match source.as_str() {
+        "skillsmp" => agenthub_core::market::search_skillsmp(&q, limit, key.as_deref())
+            .map_err(|e| e.to_string()),
+        _ => agenthub_core::market::search_skills_sh(&q, limit).map_err(|e| e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn market_preview(id: String) -> Result<MarketPreview, String> {
+    agenthub_core::market::preview_skills_sh(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn market_install_skills_sh(
+    reg: State<Registry>,
+    id: String,
+    agent_ids: Vec<String>,
+    overwrite: bool,
+) -> Result<InstallOutcome, String> {
+    let adopt = agenthub_core::market::install_skills_sh(&id, &agenthub_core::util::app_data_dir(), false)
+        .map_err(|e| e.to_string())?;
+    let deploys = reg.deploy_skill(&adopt.skill_name, &agent_ids, overwrite);
+    Ok(InstallOutcome { adopt, deploys })
+}
+
+#[tauri::command]
+pub fn market_install_git(
+    reg: State<Registry>,
+    url: String,
+    agent_ids: Vec<String>,
+    overwrite: bool,
+) -> Result<InstallOutcome, String> {
+    let adopt = agenthub_core::market::install_git(&url, &agenthub_core::util::app_data_dir(), false)
+        .map_err(|e| e.to_string())?;
+    let deploys = reg.deploy_skill(&adopt.skill_name, &agent_ids, overwrite);
+    Ok(InstallOutcome { adopt, deploys })
+}
+
+#[tauri::command]
+pub fn deploy_library_skill(
+    reg: State<Registry>,
+    name: String,
+    agent_ids: Vec<String>,
+    overwrite: bool,
+) -> Result<Vec<DeployResult>, String> {
+    Ok(reg.deploy_skill(&name, &agent_ids, overwrite))
+}
+
+fn skillsmp_key() -> Option<String> {
+    agenthub_core::store::Store::open_default()
+        .ok()
+        .and_then(|s| s.get_setting(SKILLSMP_KEY_SETTING).ok().flatten())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyStatus {
+    pub set: bool,
+    pub masked: Option<String>,
+}
+
+#[tauri::command]
+pub fn skillsmp_key_status() -> Result<KeyStatus, String> {
+    Ok(match skillsmp_key() {
+        Some(k) => {
+            let tail: String = k.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
+            KeyStatus { set: true, masked: Some(format!("sk_live_****{tail}")) }
+        }
+        None => KeyStatus { set: false, masked: None },
+    })
+}
+
+#[tauri::command]
+pub fn skillsmp_set_key(key: String) -> Result<(), String> {
+    let trimmed = key.trim().to_string();
+    if !trimmed.starts_with("sk_") {
+        return Err("SkillsMP 密钥通常以 sk_ 开头，请检查后重试".into());
+    }
+    agenthub_core::store::Store::open_default()
+        .map_err(|e| e.to_string())?
+        .set_setting(SKILLSMP_KEY_SETTING, &trimmed)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn skillsmp_clear_key() -> Result<(), String> {
+    agenthub_core::store::Store::open_default()
+        .map_err(|e| e.to_string())?
+        .delete_setting(SKILLSMP_KEY_SETTING)
+        .map_err(|e| e.to_string())
 }

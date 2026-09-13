@@ -53,7 +53,11 @@ cargo test -p agenthub-core                # 核心层测试（含格式保留�
 - [x] MCP 中心：编辑抽屉（表单 / 源码双模式）、schema 校验、多 Agent 批量下发、删除
 - [x] Skill 中心：跨 Agent 列表（用户级 / 项目级）、SKILL.md 详情、中央库、收编 adopt（dry-run 预览 + 冲突拒绝）
 - [x] 快照：浏览 / 按路径过滤 / 一键回滚（回滚前再快照，可撤销）
-- [x] 格式保留写入回归测试 + 收编 / 回滚行为测试（10 例）
+- [x] **市场与收藏**：skills.sh 匿名搜索（`/api/search` + `/api/download` 快照安装）与 SkillsMP 搜索
+  （匿名可用；配置 `sk_live_` 密钥提升配额并获得语义排序）、粘贴 Git URL 安装（`/tree/branch/子目录`
+  与 `URL#子路径` 自动 sparse clone）、统一入库中央库后一键安装到任意 Agent（冲突拒绝 / 显式覆盖）
+- [x] SkillsMP API 密钥本机管理（SQLite 存储，P2 迁移系统钥匙串）；HTTP 自动读取系统代理环境变量
+- [x] 格式保留写入回归测试 + 收编 / 回滚 / 校验 / 市场行为测试（16 例）
 - [ ] 下一步（P0 收尾）：SKILL.md Markdown 渲染、多行 YAML frontmatter 解析、配置健康度校验、异常处理打磨
 
 ## 设计红线

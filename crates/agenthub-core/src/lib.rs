@@ -10,6 +10,7 @@
 pub mod connector;
 pub mod error;
 pub mod library;
+pub mod market;
 pub mod model;
 pub mod registry;
 pub mod snapshot;

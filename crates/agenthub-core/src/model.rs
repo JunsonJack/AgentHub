@@ -140,3 +140,36 @@ pub struct DeployResult {
     pub error: Option<String>,
     pub backup_path: Option<String>,
 }
+
+/// 市场条目（skills.sh / SkillsMP 统一模型）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketSkill {
+    /// skills.sh: "owner/repo/slug"；skillsmp: 平台 id
+    pub id: String,
+    pub name: String,
+    /// "skills.sh" | "skillsmp"
+    pub market: String,
+    pub source: Option<String>,
+    pub author: Option<String>,
+    pub description: Option<String>,
+    pub installs: Option<u64>,
+    pub stars: Option<u64>,
+    pub github_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketPreview {
+    pub skill_name: String,
+    pub description: Option<String>,
+    pub files: Vec<String>,
+}
+
+/// 市场安装结果：入库报告 + 各 Agent 部署结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallOutcome {
+    pub adopt: AdoptReport,
+    pub deploys: Vec<DeployResult>,
+}

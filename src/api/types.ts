@@ -78,3 +78,35 @@ export interface SnapshotMeta {
   originalPath: string;
   createdAt: number;
 }
+
+/* ---------- 市场与收藏 ---------- */
+
+export interface MarketSkill {
+  /** skills.sh: "owner/repo/slug"；skillsmp: 平台 id */
+  id: string;
+  name: string;
+  /** "skills.sh" | "skillsmp" */
+  market: string;
+  source: string | null;
+  author: string | null;
+  description: string | null;
+  installs: number | null;
+  stars: number | null;
+  githubUrl: string | null;
+}
+
+export interface MarketPreview {
+  skillName: string;
+  description: string | null;
+  files: string[];
+}
+
+export interface InstallOutcome {
+  adopt: AdoptReport;
+  deploys: DeployResult[];
+}
+
+export interface KeyStatus {
+  set: boolean;
+  masked: string | null;
+}

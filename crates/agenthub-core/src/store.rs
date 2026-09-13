@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::error::Result;
 use crate::util::app_data_dir;
@@ -54,5 +54,29 @@ impl Store {
 
     pub fn connection(&self) -> &Connection {
         &self.conn
+    }
+
+    /// 键值设置（SkillsMP API 密钥等本地配置；P2 换 OS keychain）
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
+        self.conn
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO settings(key, value) VALUES(?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [key, value],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_setting(&self, key: &str) -> Result<()> {
+        self.conn.execute("DELETE FROM settings WHERE key = ?1", [key])?;
+        Ok(())
     }
 }

@@ -3,7 +3,11 @@ import type {
   AdoptReport,
   AgentStatus,
   DeployResult,
+  InstallOutcome,
+  KeyStatus,
   LibraryItem,
+  MarketPreview,
+  MarketSkill,
   McpEntry,
   McpServerDef,
   SkillEntry,
@@ -70,4 +74,54 @@ export function rollbackSnapshot(id: string, fileName: string): Promise<string> 
 
 export function readSkillMd(dir: string): Promise<string> {
   return invoke<string>("read_skill_md", { dir });
+}
+
+/* ---------- 市场与收藏 ---------- */
+
+export function marketSearch(
+  source: string,
+  q: string,
+  limit = 20
+): Promise<MarketSkill[]> {
+  return invoke<MarketSkill[]>("market_search", { source, q, limit });
+}
+
+export function marketPreview(id: string): Promise<MarketPreview> {
+  return invoke<MarketPreview>("market_preview", { id });
+}
+
+export function marketInstallSkillsSh(
+  id: string,
+  agentIds: string[],
+  overwrite: boolean
+): Promise<InstallOutcome> {
+  return invoke<InstallOutcome>("market_install_skills_sh", { id, agentIds, overwrite });
+}
+
+export function marketInstallGit(
+  url: string,
+  agentIds: string[],
+  overwrite: boolean
+): Promise<InstallOutcome> {
+  return invoke<InstallOutcome>("market_install_git", { url, agentIds, overwrite });
+}
+
+export function deployLibrarySkill(
+  name: string,
+  agentIds: string[],
+  overwrite: boolean
+): Promise<DeployResult[]> {
+  return invoke<DeployResult[]>("deploy_library_skill", { name, agentIds, overwrite });
+}
+
+export function skillsmpKeyStatus(): Promise<KeyStatus> {
+  return invoke<KeyStatus>("skillsmp_key_status");
+}
+
+export function skillsmpSetKey(key: string): Promise<void> {
+  return invoke<void>("skillsmp_set_key", { key });
+}
+
+export function skillsmpClearKey(): Promise<void> {
+  return invoke<void>("skillsmp_clear_key");
 }

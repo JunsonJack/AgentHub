@@ -142,4 +142,73 @@ impl Registry {
             .ok_or_else(|| CoreError::NotFound(format!("{skill_name} @ {agent_id}/{scope}")))?;
         crate::library::adopt(std::path::Path::new(&entry.dir), agent_id, dry_run)
     }
+
+    /// 把中央库里的 skill 复制安装到多个 Agent 的用户级 skill 目录。
+    /// 目标已存在且 !overwrite 时拒绝（绝不代删）。
+    pub fn deploy_skill(
+        &self,
+        name: &str,
+        agent_ids: &[String],
+        overwrite: bool,
+    ) -> Vec<DeployResult> {
+        self.deploy_skill_in(&crate::util::app_data_dir(), name, agent_ids, overwrite)
+    }
+
+    /// 同上，但中央库位置可注入（测试用临时目录）
+    pub fn deploy_skill_in(
+        &self,
+        data_root: &std::path::Path,
+        name: &str,
+        agent_ids: &[String],
+        overwrite: bool,
+    ) -> Vec<DeployResult> {
+        let src = crate::library::skills_root(data_root).join(name);
+        if !src.is_dir() {
+            return agent_ids
+                .iter()
+                .map(|id| DeployResult {
+                    agent_id: id.clone(),
+                    ok: false,
+                    error: Some(format!("中央库不存在 skill: {name}")),
+                    backup_path: None,
+                })
+                .collect();
+        }
+        agent_ids
+            .iter()
+            .map(|id| {
+                let r = (|| {
+                    let c = self.find(id)?;
+                    let dirs = crate::util::resolve_all(&c.descriptor().skill_dirs, c.base_dir());
+                    let root = dirs
+                        .first()
+                        .ok_or_else(|| CoreError::Other(format!("{id}: 注册表未声明 skill 目录")))?;
+                    std::fs::create_dir_all(root)?;
+                    let target = root.join(name);
+                    if target.exists() && !overwrite {
+                        return Err(CoreError::Other(format!(
+                            "目标已存在，拒绝覆盖（如需覆盖请显式选择）: {}",
+                            target.display()
+                        )));
+                    }
+                    crate::library::copy_dir_all(&src, &target)?;
+                    Ok(target.display().to_string())
+                })();
+                match r {
+                    Ok(_) => DeployResult {
+                        agent_id: id.clone(),
+                        ok: true,
+                        error: None,
+                        backup_path: None,
+                    },
+                    Err(e) => DeployResult {
+                        agent_id: id.clone(),
+                        ok: false,
+                        error: Some(e.to_string()),
+                        backup_path: None,
+                    },
+                }
+            })
+            .collect()
+    }
 }

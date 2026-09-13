@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { DeleteLocation, Refresh } from "@element-plus/icons-vue";
-import { listSnapshots, rollbackSnapshot } from "../api";
+import { DeleteLocation, Key, Refresh } from "@element-plus/icons-vue";
+import { listSnapshots, rollbackSnapshot, skillsmpClearKey, skillsmpKeyStatus, skillsmpSetKey } from "../api";
 import type { SnapshotMeta } from "../api/types";
 
 const snapshots = ref<SnapshotMeta[]>([]);
@@ -53,7 +53,52 @@ async function onRollback(s: SnapshotMeta) {
   }
 }
 
-onMounted(refresh);
+/* ---------- SkillsMP API 密钥 ---------- */
+
+const keyStatus = ref<{ set: boolean; masked: string | null }>({ set: false, masked: null });
+const keyInput = ref("");
+const keySaving = ref(false);
+
+async function refreshKey() {
+  try {
+    keyStatus.value = await skillsmpKeyStatus();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+async function saveKey() {
+  if (!keyInput.value.trim()) {
+    ElMessage.warning("请输入密钥（skillsmp.com/docs/api 生成）");
+    return;
+  }
+  keySaving.value = true;
+  try {
+    await skillsmpSetKey(keyInput.value.trim());
+    keyInput.value = "";
+    ElMessage.success("密钥已保存（仅存本机）");
+    await refreshKey();
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    keySaving.value = false;
+  }
+}
+
+async function clearKey() {
+  try {
+    await skillsmpClearKey();
+    ElMessage.success("已清除");
+    await refreshKey();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+onMounted(() => {
+  refresh();
+  refreshKey();
+});
 </script>
 
 <template>
@@ -66,6 +111,31 @@ onMounted(refresh);
         任何写配置动作前自动快照；回滚前也会对当前文件再快照一次（可撤销）
       </el-descriptions-item>
     </el-descriptions>
+
+    <div class="section-head">
+      <span class="section-title">SkillsMP API 密钥</span>
+    </div>
+    <el-card shadow="never" class="mb">
+      <div class="key-row">
+        <el-input
+          v-model="keyInput"
+          type="password"
+          show-password
+          :prefix-icon="Key"
+          placeholder="sk_live_...（在 skillsmp.com/docs/api 生成）"
+          class="key-input"
+        />
+        <el-button type="primary" :loading="keySaving" @click="saveKey">保存</el-button>
+        <el-button :disabled="!keyStatus.set" @click="clearKey">清除</el-button>
+      </div>
+      <div class="key-note">
+        <template v-if="keyStatus.set">
+          当前密钥：<code class="cmd">{{ keyStatus.masked }}</code>
+        </template>
+        <template v-else>未设置。匿名可用（每天 50 次搜索）；配置密钥后每天 500 次并启用按技能功能（语义）排序的搜索。</template>
+        密钥只保存在本机 SQLite（%APPDATA%\AgentHub），P2 计划迁移到系统钥匙串。
+      </div>
+    </el-card>
 
     <div class="section-head">
       <span class="section-title">快照历史（{{ snapshots.length }}）</span>
@@ -111,4 +181,7 @@ onMounted(refresh);
   font-size: 12px; font-family: Consolas, monospace;
   background: var(--el-fill-color); padding: 2px 6px; border-radius: 4px;
 }
+.key-row { display: flex; gap: 10px; margin-bottom: 10px; }
+.key-input { max-width: 420px; }
+.key-note { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.7; }
 </style>

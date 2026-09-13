@@ -52,10 +52,10 @@ pub fn adopt_into(
 
     if !dry_run && !conflict {
         copy_rec(source_dir, &target)?;
-        let (fm_name, description) =
-            crate::connector::parse_frontmatter(&target.join("SKILL.md"));
+        let (_fm_name, description) = crate::connector::parse_frontmatter(&target.join("SKILL.md"));
         let item = LibraryItem {
-            name: fm_name.unwrap_or(name.clone()),
+            // 目录名是规范标识；frontmatter 名只作展示参考
+            name: name.clone(),
             kind: "skill".into(),
             source_agent: Some(source_agent.into()),
             source_path: Some(source_dir.display().to_string()),
@@ -135,6 +135,11 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// 递归复制目录（deploy_skill 与测试共用）
+pub fn copy_dir_all(src: &Path, dest: &Path) -> Result<()> {
+    copy_rec(src, dest)
 }
 
 fn copy_rec(src: &Path, dest: &Path) -> Result<()> {
