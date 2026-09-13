@@ -119,3 +119,11 @@ export interface HealthIssue {
   message: string;
   path: string | null;
 }
+
+export interface TrashItem {
+  id: string;
+  originalPath: string;
+  agentId: string;
+  name: string;
+  deletedAt: number;
+}

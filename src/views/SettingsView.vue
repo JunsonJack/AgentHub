@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { DeleteLocation, Key, Refresh } from "@element-plus/icons-vue";
-import { listSnapshots, rollbackSnapshot, skillsmpClearKey, skillsmpKeyStatus, skillsmpSetKey } from "../api";
-import type { SnapshotMeta } from "../api/types";
+import { DeleteLocation, Key, Refresh, RefreshLeft } from "@element-plus/icons-vue";
+import {
+  listSnapshots,
+  listTrash,
+  restoreTrash,
+  rollbackSnapshot,
+  skillsmpClearKey,
+  skillsmpKeyStatus,
+  skillsmpSetKey,
+} from "../api";
+import type { SnapshotMeta, TrashItem } from "../api/types";
 
 const snapshots = ref<SnapshotMeta[]>([]);
 const loading = ref(false);
@@ -98,7 +106,34 @@ async function clearKey() {
 onMounted(() => {
   refresh();
   refreshKey();
+  refreshTrash();
 });
+
+/* ---------- 回收站 ---------- */
+
+const trashItems = ref<TrashItem[]>([]);
+const trashLoading = ref(false);
+
+async function refreshTrash() {
+  trashLoading.value = true;
+  try {
+    trashItems.value = await listTrash();
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    trashLoading.value = false;
+  }
+}
+
+async function onRestore(t: TrashItem) {
+  try {
+    const restored = await restoreTrash(t.id);
+    ElMessage.success(`已恢复：${restored}`);
+    await refreshTrash();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
 </script>
 
 <template>
@@ -168,6 +203,29 @@ onMounted(() => {
         </template>
       </el-table-column>
       <template #empty>还没有任何快照——第一次在 MCP 中心保存配置后就会出现</template>
+    </el-table>
+
+    <div class="section-head">
+      <span class="section-title">回收站（{{ trashItems.length }}）</span>
+      <el-button size="small" :icon="Refresh" :loading="trashLoading" @click="refreshTrash">刷新</el-button>
+    </div>
+    <el-table :data="trashItems" v-loading="trashLoading" stripe>
+      <el-table-column label="删除时间" width="170">
+        <template #default="{ row }">{{ fmtTime(row.deletedAt) }}</template>
+      </el-table-column>
+      <el-table-column prop="name" label="Skill" width="200" />
+      <el-table-column prop="agentId" label="Agent" width="130" />
+      <el-table-column label="原路径" min-width="320">
+        <template #default="{ row }">
+          <code class="cmd">{{ row.originalPath }}</code>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="110" fixed="right">
+        <template #default="{ row }">
+          <el-button size="small" type="success" plain :icon="RefreshLeft" @click="onRestore(row)">恢复</el-button>
+        </template>
+      </el-table-column>
+      <template #empty>回收站是空的——在 Skill 中心删除的 skill 会出现在这里，可随时恢复</template>
     </el-table>
   </div>
 </template>

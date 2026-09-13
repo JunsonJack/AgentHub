@@ -73,6 +73,29 @@ pub fn list_snapshots() -> Result<Vec<SnapshotMeta>, String> {
 }
 
 #[tauri::command]
+pub fn remove_skill(
+    reg: State<Registry>,
+    agent_id: String,
+    skill_name: String,
+    scope: String,
+) -> Result<agenthub_core::trash::TrashItem, String> {
+    reg.remove_skill(&agent_id, &skill_name, &scope)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_trash() -> Result<Vec<agenthub_core::trash::TrashItem>, String> {
+    Ok(agenthub_core::trash::list_trash())
+}
+
+#[tauri::command]
+pub fn restore_trash(id: String) -> Result<String, String> {
+    agenthub_core::trash::restore_trash(&id)
+        .map(|p| p.display().to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn rollback_snapshot(id: String, file_name: String) -> Result<String, String> {
     agenthub_core::snapshot::rollback(&id, &file_name)
         .map(|p| p.display().to_string())

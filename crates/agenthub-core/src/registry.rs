@@ -151,6 +151,32 @@ impl Registry {
         crate::library::adopt(std::path::Path::new(&entry.dir), agent_id, dry_run)
     }
 
+    /// 删除 Agent 里的 skill：先移入回收站（可恢复），绝不直接销毁
+    pub fn remove_skill(
+        &self,
+        agent_id: &str,
+        skill_name: &str,
+        scope: &str,
+    ) -> Result<crate::trash::TrashItem> {
+        self.remove_skill_in(&crate::trash::trash_root(), agent_id, skill_name, scope)
+    }
+
+    /// 同上，回收站位置可注入（测试用）
+    pub fn remove_skill_in(
+        &self,
+        trash_root: &std::path::Path,
+        agent_id: &str,
+        skill_name: &str,
+        scope: &str,
+    ) -> Result<crate::trash::TrashItem> {
+        let entry = self
+            .all_skills()
+            .into_iter()
+            .find(|s| s.agent_id == agent_id && s.name == skill_name && s.scope == scope)
+            .ok_or_else(|| CoreError::NotFound(format!("{skill_name} @ {agent_id}/{scope}")))?;
+        crate::trash::trash_dir_in(trash_root, std::path::Path::new(&entry.dir), agent_id)
+    }
+
     /// 把中央库里的 skill 复制安装到多个 Agent 的用户级 skill 目录。
     /// 目标已存在且 !overwrite 时拒绝（绝不代删）。
     pub fn deploy_skill(

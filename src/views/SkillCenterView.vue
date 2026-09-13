@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ElMessage } from "element-plus";
-import { Collection, Refresh, Search, View } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { Collection, Delete, Refresh, Search, View } from "@element-plus/icons-vue";
 import {
   adoptSkill,
   listLibrary,
   listSkills,
   readLibrarySkill,
   readSkillMd,
+  removeSkill,
 } from "../api";
 import type { AdoptReport, LibraryItem, SkillEntry } from "../api/types";
 
@@ -121,6 +122,27 @@ async function confirmAdopt() {
   }
 }
 
+/* ---------- 删除（回收站式，可恢复，见设置页） ---------- */
+
+async function onDelete(s: SkillEntry) {
+  try {
+    await ElMessageBox.confirm(
+      `把 ${s.agentId} 的「${s.name}」移入 AgentHub 回收站？\n原目录：${s.dir}\n\n不会立即销毁，可在设置页随时恢复。`,
+      "确认删除",
+      { type: "warning", confirmButtonText: "移入回收站", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  try {
+    await removeSkill(s.agentId, s.name, s.scope);
+    ElMessage.success("已移入回收站（设置页可恢复）");
+    await refresh();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
 onMounted(refresh);
 </script>
 
@@ -156,10 +178,11 @@ onMounted(refresh);
           <el-table-column label="描述" min-width="260">
             <template #default="{ row }">{{ row.description ?? "—" }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="170" fixed="right">
+          <el-table-column label="操作" width="230" fixed="right">
             <template #default="{ row }">
               <el-button size="small" :icon="View" @click="openAgentSkillDetail(row)">详情</el-button>
               <el-button size="small" type="primary" plain :icon="Collection" @click="startAdopt(row)">收编</el-button>
+              <el-button size="small" type="danger" plain :icon="Delete" @click="onDelete(row)" />
             </template>
           </el-table-column>
           <template #empty>没有匹配的 skill</template>

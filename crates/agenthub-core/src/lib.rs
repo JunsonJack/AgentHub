@@ -16,6 +16,7 @@ pub mod model;
 pub mod registry;
 pub mod snapshot;
 pub mod store;
+pub mod trash;
 pub mod util;
 
 pub use error::{CoreError, Result};

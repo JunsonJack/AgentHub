@@ -13,6 +13,7 @@ import type {
   McpServerDef,
   SkillEntry,
   SnapshotMeta,
+  TrashItem,
   WriteReport,
 } from "./types";
 
@@ -79,6 +80,22 @@ export function rollbackSnapshot(id: string, fileName: string): Promise<string> 
 
 export function readSkillMd(dir: string): Promise<string> {
   return invoke<string>("read_skill_md", { dir });
+}
+
+export function removeSkill(
+  agentId: string,
+  skillName: string,
+  scope: string
+): Promise<unknown> {
+  return invoke("remove_skill", { agentId, skillName, scope });
+}
+
+export function listTrash(): Promise<TrashItem[]> {
+  return invoke<TrashItem[]>("list_trash");
+}
+
+export function restoreTrash(id: string): Promise<string> {
+  return invoke<string>("restore_trash", { id });
 }
 
 /* ---------- 市场与收藏 ---------- */
