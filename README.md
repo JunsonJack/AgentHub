@@ -45,20 +45,19 @@ cargo check --workspace --tests            # Rust 全工作区
 cargo test -p agenthub-core                # 核心层测试（含格式保留写入回归）
 ```
 
-## 当前状态（P0 主体完成）
+## 当前状态（P0 功能已全部落地）
 
-- [x] 前端 6 页面骨架 + 布局 + 路由 + 状态管理
+- [x] 前端 6 页面（总览 / MCP 中心 / Skill 中心 / 市场与收藏 / AI 工具箱占位 / 设置）+ 路由 + 状态管理
 - [x] Rust 工作区：`src-tauri`（Tauri 壳）与 `agenthub-core`（核心层）分离
-- [x] Connector v0：注册表数据化（6 个 Agent 声明）+ Claude Code / ZCode / Codex / Claude Desktop / Gemini 的 MCP 读取 + 写入（快照前置、键序保留、TOML 注释保留）
-- [x] MCP 中心：编辑抽屉（表单 / 源码双模式）、schema 校验、多 Agent 批量下发、删除
-- [x] Skill 中心：跨 Agent 列表（用户级 / 项目级）、SKILL.md 详情、中央库、收编 adopt（dry-run 预览 + 冲突拒绝）
-- [x] 快照：浏览 / 按路径过滤 / 一键回滚（回滚前再快照，可撤销）
-- [x] **市场与收藏**：skills.sh 匿名搜索（`/api/search` + `/api/download` 快照安装）与 SkillsMP 搜索
-  （匿名可用；配置 `sk_live_` 密钥提升配额并获得语义排序）、粘贴 Git URL 安装（`/tree/branch/子目录`
-  与 `URL#子路径` 自动 sparse clone）、统一入库中央库后一键安装到任意 Agent（冲突拒绝 / 显式覆盖）
-- [x] SkillsMP API 密钥本机管理（SQLite 存储，P2 迁移系统钥匙串）；HTTP 自动读取系统代理环境变量
-- [x] 格式保留写入回归测试 + 收编 / 回滚 / 校验 / 市场行为测试（16 例）
-- [ ] 下一步（P0 收尾）：SKILL.md Markdown 渲染、多行 YAML frontmatter 解析、配置健康度校验、异常处理打磨
+- [x] Agent 识别与总览：仪表盘（Skill/MCP 数量 + 健康度卡片 + 待处理提醒）
+- [x] **配置健康度**：解析失败 / 非法条目 / 启动命令不在 PATH / skill 缺 SKILL.md
+- [x] MCP 中心：读取（含项目级作用域）、编辑抽屉（表单/源码双模式）、schema 校验、多 Agent 批量下发、删除、**禁用/一键还原**（移出配置+本地记录）、**覆盖矩阵**视图
+- [x] Skill 中心：跨 Agent 列表（用户级/项目级）、SKILL.md 渲染（DOMPurify 消毒）、**收编 adopt（dry-run）**、**删除（回收站可恢复）**、**文件夹导入**、中央库一键安装到任意 Agent
+- [x] **市场**：skills.sh 匿名搜索与快照安装、SkillsMP 搜索（密钥可选，语义排序）、Git URL 安装（sparse clone）
+- [x] 安全网：一切写配置前自动快照；**快照浏览/按路径过滤/一键回滚（回滚前再快照）**
+- [x] 设置：SkillsMP 密钥管理、**Agent 路径覆写**、数据目录说明
+- [x] 格式保留写入（TOML 注释/排版、JSON 键序）回归测试；共 40 例核心测试
+- [ ] 已知留待项：Codex 被禁条目的自有注释不随启用还原（无关内容零改动，行为有测试固化）；MCP 连通性测试（P1 第 7 项）；skill 启用/禁用（各 Agent 无统一机制，暂不做有歧义的伪禁用）
 
 ## 设计红线
 

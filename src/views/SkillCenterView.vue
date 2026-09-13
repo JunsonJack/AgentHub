@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Collection, Delete, Refresh, Search, View } from "@element-plus/icons-vue";
+import { Collection, Delete, FolderAdd, Refresh, Search, View } from "@element-plus/icons-vue";
 import {
   adoptSkill,
+  importSkillFolder,
   listLibrary,
   listSkills,
   readLibrarySkill,
@@ -146,6 +147,51 @@ async function onDelete(s: SkillEntry) {
   }
 }
 
+/* ---------- 文件夹导入 ---------- */
+
+const importDialogVisible = ref(false);
+const importPath = ref("");
+const importPlan = ref<AdoptReport | null>(null);
+const importing = ref(false);
+
+function openImport() {
+  importPath.value = "";
+  importPlan.value = null;
+  importDialogVisible.value = true;
+}
+
+async function previewImport() {
+  const p = importPath.value.trim().replace(/^"|"$/g, "");
+  if (!p) {
+    ElMessage.warning("请输入 skill 所在文件夹路径");
+    return;
+  }
+  try {
+    importPlan.value = await importSkillFolder(p, true);
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+async function confirmImport() {
+  const p = importPath.value.trim().replace(/^"|"$/g, "");
+  importing.value = true;
+  try {
+    const r = await importSkillFolder(p, false);
+    if (r.conflict) {
+      ElMessage.warning(`中央库已有同名条目「${r.skillName}」，已拒绝覆盖`);
+    } else {
+      ElMessage.success(`已导入 ${r.files.length} 个文件到中央库`);
+      importDialogVisible.value = false;
+      await refresh();
+    }
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    importing.value = false;
+  }
+}
+
 onMounted(refresh);
 </script>
 
@@ -162,6 +208,7 @@ onMounted(refresh);
             <el-option label="用户级" value="user" />
             <el-option label="项目级" value="project" />
           </el-select>
+          <el-button :icon="FolderAdd" @click="openImport">导入文件夹</el-button>
           <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
         </div>
 
@@ -225,6 +272,29 @@ onMounted(refresh);
       <div v-if="renderedMd" class="md-body" v-html="renderedMd"></div>
       <div v-else class="md-empty">（无 SKILL.md 内容）</div>
     </el-drawer>
+
+    <!-- 文件夹导入对话框 -->
+    <el-dialog v-model="importDialogVisible" title="从文件夹导入 skill" width="480px">
+      <el-input v-model="importPath" placeholder="skill 文件夹完整路径（含 SKILL.md）" clearable @keyup.enter="previewImport">
+        <template #append>
+          <el-button @click="previewImport">预览</el-button>
+        </template>
+      </el-input>
+      <template v-if="importPlan">
+        <el-alert
+          v-if="importPlan.conflict"
+          title="中央库已存在同名条目，执行将被拒绝（不会覆盖）"
+          type="warning"
+          :closable="false"
+          class="mt"
+        />
+        <p class="mt">共 {{ importPlan.files.length }} 个文件 → {{ importPlan.targetDir }}</p>
+      </template>
+      <template #footer>
+        <el-button @click="importDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importPlan || importPlan.conflict" @click="confirmImport">导入</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="adoptDialogVisible" title="收编预览（dry-run）" width="480px">
       <template v-if="adoptPlan">
@@ -291,4 +361,5 @@ onMounted(refresh);
 }
 .path { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; }
 .mono :deep(textarea) { font-family: Consolas, monospace; }
+.mt { margin-top: 12px; }
 </style>

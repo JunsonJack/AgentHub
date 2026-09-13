@@ -25,6 +25,7 @@ pub fn run() {
             commands::adopt_skill,
             commands::list_library,
             commands::read_library_skill,
+            commands::import_skill_folder,
             commands::list_snapshots,
             commands::remove_skill,
             commands::list_trash,

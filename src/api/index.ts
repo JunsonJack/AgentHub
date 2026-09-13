@@ -87,6 +87,10 @@ export function readLibrarySkill(name: string): Promise<string> {
   return invoke<string>("read_library_skill", { name });
 }
 
+export function importSkillFolder(path: string, dryRun: boolean): Promise<AdoptReport> {
+  return invoke<AdoptReport>("import_skill_folder", { path, dryRun });
+}
+
 export function listSnapshots(): Promise<SnapshotMeta[]> {
   return invoke<SnapshotMeta[]>("list_snapshots");
 }

@@ -23,25 +23,42 @@ const HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 
 /* ---------------- HTTP ---------------- */
 
-fn agent() -> ureq::Agent {
+fn agent_with_proxy(proxy: Option<ureq::Proxy>) -> ureq::Agent {
     let mut b = ureq::AgentBuilder::new().timeout(HTTP_TIMEOUT);
-    // 本机常见场景：系统代理（如 Clash）以环境变量暴露， ureq 不会自动读取
-    let proxy = [
-        "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy",
-    ]
-    .iter()
-    .find_map(|k| std::env::var(k).ok())
-    .filter(|v| !v.trim().is_empty());
-    if let Some(url) = proxy {
-        if let Ok(p) = ureq::Proxy::new(url.trim()) {
-            b = b.proxy(p);
-        }
+    if let Some(p) = proxy {
+        b = b.proxy(p);
     }
     b.build()
 }
 
+/// 代理策略：先读环境变量（Clash 等系统代理），失败则直连重试——
+/// 国内网络下两类路径各有概率成功，双保险避免单点抖动导致功能不可用。
+fn env_proxy() -> Option<ureq::Proxy> {
+    ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy"]
+        .iter()
+        .find_map(|k| std::env::var(k).ok())
+        .filter(|v| !v.trim().is_empty())
+        .and_then(|url| ureq::Proxy::new(url.trim()).ok())
+}
+
 fn http_get_json<T: for<'de> Deserialize<'de>>(url: &str, api_key: Option<&str>) -> Result<T> {
-    let req = agent().get(url);
+    let strategies = [env_proxy(), None];
+    let mut last_err: Option<CoreError> = None;
+    for proxy in strategies {
+        match http_get_json_once(agent_with_proxy(proxy), url, api_key) {
+            Ok(v) => return Ok(v),
+            Err(e) => last_err = Some(e),
+        }
+    }
+    Err(last_err.unwrap_or_else(|| CoreError::Other("网络请求失败".into())))
+}
+
+fn http_get_json_once<T: for<'de> Deserialize<'de>>(
+    agent: ureq::Agent,
+    url: &str,
+    api_key: Option<&str>,
+) -> Result<T> {
+    let req = agent.get(url);
     let req = match api_key {
         Some(k) if !k.trim().is_empty() => req.set("Authorization", &format!("Bearer {}", k.trim())),
         _ => req,
