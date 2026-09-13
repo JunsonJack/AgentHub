@@ -68,3 +68,25 @@ fn remove_unknown_skill_errors() {
     let r = reg.remove_skill_in(&data.path().join("trash"), "claude-code", "ghost", "user");
     assert!(r.is_err());
 }
+
+#[test]
+fn snapshot_prune_keeps_newest() {
+    let data = tmp();
+    let root = data.path().join("snapshots");
+    for ms in [1000u64, 2000, 3000, 4000, 5000] {
+        let d = root.join(ms.to_string());
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("cfg.json"), "x").unwrap();
+    }
+    let removed = agenthub_core::snapshot::prune_in(&data.path(), 3).unwrap();
+    assert_eq!(removed, 2);
+    let remaining = agenthub_core::snapshot::prune_in(&data.path(), 3).unwrap();
+    assert_eq!(remaining, 0, "再次清理应无可删");
+    let left: Vec<String> = std::fs::read_dir(&root)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+    assert_eq!(left.len(), 3);
+    assert!(left.contains(&"5000".to_string()), "最新组必须保留");
+}

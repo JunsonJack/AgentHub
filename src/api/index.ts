@@ -99,6 +99,10 @@ export function rollbackSnapshot(id: string, fileName: string): Promise<string> 
   return invoke<string>("rollback_snapshot", { id, fileName });
 }
 
+export function pruneSnapshots(keep: number): Promise<number> {
+  return invoke<number>("prune_snapshots", { keep });
+}
+
 export function readSkillMd(dir: string): Promise<string> {
   return invoke<string>("read_skill_md", { dir });
 }

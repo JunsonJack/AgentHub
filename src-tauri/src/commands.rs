@@ -137,6 +137,11 @@ pub fn rollback_snapshot(id: String, file_name: String) -> Result<String, String
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn prune_snapshots(keep: u32) -> Result<usize, String> {
+    agenthub_core::snapshot::prune(keep as usize).map_err(|e| e.to_string())
+}
+
 /// 读取任意 skill 目录下的 SKILL.md（详情抽屉用；本地单机软件，路径来自 list_skills）
 #[tauri::command]
 pub fn read_skill_md(dir: String) -> Result<String, String> {

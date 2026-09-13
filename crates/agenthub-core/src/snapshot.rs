@@ -100,6 +100,36 @@ pub fn list_in(data_root: &Path) -> Vec<SnapshotMeta> {
     out
 }
 
+/// 手动清理旧快照：保留时间戳最新的 `keep` 组，返回删除的组数。
+/// 只做显式调用，绝不自动删除（快照是用户的安全网）。
+pub fn prune(keep: usize) -> Result<usize> {
+    prune_in(&app_data_dir(), keep)
+}
+
+pub fn prune_in(data_root: &Path, keep: usize) -> Result<usize> {
+    let root = root(data_root);
+    let Ok(dirs) = std::fs::read_dir(&root) else {
+        return Ok(0);
+    };
+    let mut names: Vec<(String, u64)> = dirs
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| {
+            let id = e.file_name().to_string_lossy().to_string();
+            let ts = id.parse::<u64>().ok()?;
+            Some((id, ts))
+        })
+        .collect();
+    names.sort_by(|a, b| b.1.cmp(&a.1));
+    let mut removed = 0;
+    for (id, _) in names.into_iter().skip(keep) {
+        if std::fs::remove_dir_all(root.join(&id)).is_ok() {
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
 /// 回滚：把备份拷回原路径。回滚前先对当前文件再拍一次快照（可撤销的回滚）。
 pub fn rollback(id: &str, file_name: &str) -> Result<PathBuf> {
     rollback_in(&app_data_dir(), id, file_name)

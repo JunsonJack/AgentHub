@@ -31,6 +31,7 @@ pub fn run() {
             commands::list_trash,
             commands::restore_trash,
             commands::rollback_snapshot,
+            commands::prune_snapshots,
             commands::read_skill_md,
             commands::get_path_overrides,
             commands::set_path_overrides,

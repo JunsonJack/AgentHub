@@ -6,6 +6,7 @@ import {
   getPathOverrides,
   listSnapshots,
   listTrash,
+  pruneSnapshots,
   restoreTrash,
   rollbackSnapshot,
   setPathOverrides,
@@ -162,6 +163,25 @@ async function onRestore(t: TrashItem) {
     ElMessage.error(String(e));
   }
 }
+
+async function onPrune() {
+  try {
+    await ElMessageBox.confirm(
+      "清理最旧的快照，仅保留最近 50 组。清理不可恢复，确定继续？",
+      "清理快照",
+      { type: "warning", confirmButtonText: "清理", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  try {
+    const removed = await pruneSnapshots(50);
+    ElMessage.success(removed ? `已清理 ${removed} 组旧快照` : "没有需要清理的快照");
+    await refresh();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
 </script>
 
 <template>
@@ -225,6 +245,7 @@ async function onRestore(t: TrashItem) {
       <div>
         <el-input v-model="filter" placeholder="按原路径过滤" clearable size="small" class="filter" />
         <el-button size="small" :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
+        <el-button size="small" type="danger" plain @click="onPrune">清理旧快照（保留 50）</el-button>
       </div>
     </div>
 
