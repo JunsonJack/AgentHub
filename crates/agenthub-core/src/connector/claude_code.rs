@@ -21,13 +21,13 @@ impl ClaudeCodeConnector {
         Self::new(crate::util::home_base())
     }
     pub fn new(base: PathBuf) -> Self {
-        Self {
-            desc: registry::descriptor("claude-code"),
-            base,
-        }
+        Self::with_descriptor(registry::descriptor("claude-code"), base)
+    }
+    pub fn with_descriptor(desc: AgentDescriptor, base: PathBuf) -> Self {
+        Self { desc, base }
     }
     fn config_path(&self) -> PathBuf {
-        self.base.join(".claude.json")
+        crate::util::primary_config_path(&self.desc, &self.base, ".claude.json")
     }
 }
 

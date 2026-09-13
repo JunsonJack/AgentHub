@@ -35,21 +35,72 @@ pub fn descriptor(id: &str) -> AgentDescriptor {
         .unwrap_or_else(|| panic!("registry.json 中不存在 id={id} 的 Agent"))
 }
 
+/// 把用户覆写应用到当前 OS 的路径声明上
+fn apply_overrides(descs: &mut [AgentDescriptor], overrides: &serde_json::Value) {
+    let Some(map) = overrides.as_object() else { return };
+    for d in descs.iter_mut() {
+        let Some(spec) = map.get(&d.id).and_then(|v| v.as_object()) else {
+            continue;
+        };
+        if let Some(list) = string_list(spec.get("mcpConfigPaths")) {
+            set_current_os(&mut d.mcp_config_paths, list);
+        }
+        if let Some(list) = string_list(spec.get("skillDirs")) {
+            set_current_os(&mut d.skill_dirs, list);
+        }
+    }
+}
+
+fn string_list(v: Option<&serde_json::Value>) -> Option<Vec<String>> {
+    let arr = v?.as_array()?;
+    let list: Vec<String> = arr
+        .iter()
+        .filter_map(|p| p.as_str().map(String::from))
+        .filter(|s| !s.trim().is_empty())
+        .collect();
+    Some(list)
+}
+
+fn set_current_os(paths: &mut crate::model::OsPaths, list: Vec<String>) {
+    if cfg!(target_os = "windows") {
+        paths.windows = list;
+    } else if cfg!(target_os = "macos") {
+        paths.macos = list;
+    } else {
+        paths.linux = list;
+    }
+}
+
 pub struct Registry {
     connectors: Vec<Box<dyn Connector>>,
 }
 
+/// 设置键：路径覆写 JSON {"agent-id": {"mcpConfigPaths": [...], "skillDirs": [...]}}
+pub const OVERRIDES_KEY: &str = "path_overrides";
+
 impl Registry {
     pub fn load() -> Result<Self> {
         let base = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        Ok(Self::with_base(base))
+        // 覆写读取失败不阻断启动（退化为默认路径）
+        let overrides = crate::store::Store::open_default()
+            .ok()
+            .and_then(|s| s.get_setting(OVERRIDES_KEY).ok().flatten())
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .unwrap_or(serde_json::Value::Null);
+        Ok(Self::with_overrides(base, &overrides))
     }
 
     pub fn with_base(base: PathBuf) -> Self {
+        Self::with_overrides(base, &serde_json::Value::Null)
+    }
+
+    pub fn with_overrides(base: PathBuf, overrides: &serde_json::Value) -> Self {
+        let mut descs: Vec<AgentDescriptor> = descriptors().iter().cloned().collect();
+        apply_overrides(&mut descs, overrides);
         Self {
-            connectors: descriptors()
+            connectors: descs
                 .iter()
-                .map(|d| connector::generic::make_connector(&d.id, base.clone()))
+                .map(|d| connector::generic::make_connector(d, base.clone()))
                 .collect(),
         }
     }

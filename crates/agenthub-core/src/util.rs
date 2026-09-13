@@ -32,3 +32,9 @@ pub fn app_data_dir() -> PathBuf {
 pub fn home_base() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
 }
+
+/// 连接器的主配置路径：注册表（含覆写）声明的当前 OS 第一条路径
+pub fn primary_config_path(desc: &crate::model::AgentDescriptor, base: &Path, fallback: &str) -> PathBuf {
+    let resolved = resolve_all(&desc.mcp_config_paths, base);
+    resolved.into_iter().next().unwrap_or_else(|| base.join(fallback))
+}

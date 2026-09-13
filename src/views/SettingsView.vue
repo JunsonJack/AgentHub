@@ -3,10 +3,12 @@ import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { DeleteLocation, Key, Refresh, RefreshLeft } from "@element-plus/icons-vue";
 import {
+  getPathOverrides,
   listSnapshots,
   listTrash,
   restoreTrash,
   rollbackSnapshot,
+  setPathOverrides,
   skillsmpClearKey,
   skillsmpKeyStatus,
   skillsmpSetKey,
@@ -107,12 +109,38 @@ onMounted(() => {
   refresh();
   refreshKey();
   refreshTrash();
+  refreshOverrides();
 });
 
 /* ---------- 回收站 ---------- */
 
 const trashItems = ref<TrashItem[]>([]);
 const trashLoading = ref(false);
+
+/* ---------- Agent 路径覆写 ---------- */
+
+const overridesRaw = ref("{}");
+const overridesSaving = ref(false);
+
+async function refreshOverrides() {
+  try {
+    overridesRaw.value = await getPathOverrides();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+async function saveOverrides() {
+  overridesSaving.value = true;
+  try {
+    await setPathOverrides(overridesRaw.value);
+    ElMessage.success("已保存，重启应用后生效");
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    overridesSaving.value = false;
+  }
+}
 
 async function refreshTrash() {
   trashLoading.value = true;
@@ -170,6 +198,26 @@ async function onRestore(t: TrashItem) {
         <template v-else>未设置。匿名可用（每天 50 次搜索）；配置密钥后每天 500 次并启用按技能功能（语义）排序的搜索。</template>
         密钥只保存在本机 SQLite（%APPDATA%\AgentHub），P2 计划迁移到系统钥匙串。
       </div>
+    </el-card>
+
+    <div class="section-head">
+      <span class="section-title">Agent 路径覆写（进阶）</span>
+    </div>
+    <el-card shadow="never" class="mb">
+      <p class="key-note mb">
+        当 Agent 装在自定义位置时，可覆写其配置路径与 skill 目录（仅当前操作系统生效，路径支持 ~ 前缀）。
+        示例：{"claude-code": {"mcpConfigPaths": ["D:/portable/.claude.json"]}}。
+        保存后<b>重启应用</b>生效；留空对象 {} 恢复默认。
+      </p>
+      <el-input
+        v-model="overridesRaw"
+        type="textarea"
+        :rows="5"
+        spellcheck="false"
+        class="mono"
+        placeholder='{}'
+      />
+      <el-button type="primary" class="mt" :loading="overridesSaving" @click="saveOverrides">保存覆写</el-button>
     </el-card>
 
     <div class="section-head">
@@ -242,4 +290,6 @@ async function onRestore(t: TrashItem) {
 .key-row { display: flex; gap: 10px; margin-bottom: 10px; }
 .key-input { max-width: 420px; }
 .key-note { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.7; }
+.mono :deep(textarea) { font-family: Consolas, monospace; }
+.mt { margin-top: 10px; }
 </style>

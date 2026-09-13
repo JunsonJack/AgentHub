@@ -18,10 +18,10 @@ pub struct GenericJsonMcpConnector {
 
 impl GenericJsonMcpConnector {
     pub fn new(id: &str, base: PathBuf) -> Self {
-        Self {
-            desc: registry::descriptor(id),
-            base,
-        }
+        Self::with_descriptor(registry::descriptor(id), base)
+    }
+    pub fn with_descriptor(desc: AgentDescriptor, base: PathBuf) -> Self {
+        Self { desc, base }
     }
     fn config_path(&self) -> Option<PathBuf> {
         resolve_all(&self.desc.mcp_config_paths, &self.base)
@@ -91,10 +91,10 @@ pub struct DetectOnlyConnector {
 
 impl DetectOnlyConnector {
     pub fn new(id: &str, base: PathBuf) -> Self {
-        Self {
-            desc: registry::descriptor(id),
-            base,
-        }
+        Self::with_descriptor(registry::descriptor(id), base)
+    }
+    pub fn with_descriptor(desc: AgentDescriptor, base: PathBuf) -> Self {
+        Self { desc, base }
     }
 }
 
@@ -113,15 +113,15 @@ impl Connector for DetectOnlyConnector {
     }
 }
 
-/// 供注册表构造使用
-pub fn make_connector(id: &str, base: PathBuf) -> Box<dyn Connector> {
-    match id {
-        "claude-code" => Box::new(ClaudeCodeConnector::new(base)),
-        "zcode" => Box::new(ZcodeConnector::new(base)),
-        "codex" => Box::new(CodexConnector::new(base)),
-        "cursor" => Box::new(CursorConnector::new(base)),
-        "gemini-cli" | "claude-desktop" => Box::new(GenericJsonMcpConnector::new(id, base)),
-        _ => Box::new(DetectOnlyConnector::new(id, base)),
+/// 供注册表构造使用：按描述符生成对应连接器
+pub fn make_connector(desc: &AgentDescriptor, base: PathBuf) -> Box<dyn Connector> {
+    match desc.id.as_str() {
+        "claude-code" => Box::new(ClaudeCodeConnector::with_descriptor(desc.clone(), base)),
+        "zcode" => Box::new(ZcodeConnector::with_descriptor(desc.clone(), base)),
+        "codex" => Box::new(CodexConnector::with_descriptor(desc.clone(), base)),
+        "cursor" => Box::new(CursorConnector::with_descriptor(desc.clone(), base)),
+        "gemini-cli" | "claude-desktop" => Box::new(GenericJsonMcpConnector::with_descriptor(desc.clone(), base)),
+        _ => Box::new(DetectOnlyConnector::with_descriptor(desc.clone(), base)),
     }
 }
 

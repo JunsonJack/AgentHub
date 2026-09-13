@@ -164,3 +164,11 @@ export function skillsmpSetKey(key: string): Promise<void> {
 export function skillsmpClearKey(): Promise<void> {
   return invoke<void>("skillsmp_clear_key");
 }
+
+export function getPathOverrides(): Promise<string> {
+  return invoke<string>("get_path_overrides");
+}
+
+export function setPathOverrides(raw: string): Promise<void> {
+  return invoke<void>("set_path_overrides", { raw });
+}

@@ -31,6 +31,8 @@ pub fn run() {
             commands::restore_trash,
             commands::rollback_snapshot,
             commands::read_skill_md,
+            commands::get_path_overrides,
+            commands::set_path_overrides,
             commands::market_search,
             commands::market_preview,
             commands::market_install_skills_sh,

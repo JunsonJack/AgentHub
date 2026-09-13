@@ -136,6 +136,42 @@ pub fn read_skill_md(dir: String) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| e.to_string())
 }
 
+/* ---------- Agent 路径覆写 ---------- */
+
+#[tauri::command]
+pub fn get_path_overrides() -> Result<String, String> {
+    Ok(agenthub_core::store::Store::open_default()
+        .ok()
+        .and_then(|s| {
+            s.get_setting(agenthub_core::registry::OVERRIDES_KEY)
+                .ok()
+                .flatten()
+        })
+        .unwrap_or_else(|| "{}".into()))
+}
+
+#[tauri::command]
+pub fn set_path_overrides(raw: String) -> Result<(), String> {
+    let v: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("JSON 无效: {e}"))?;
+    if !v.is_object() {
+        return Err("必须是一个 JSON 对象，键为 Agent id".into());
+    }
+    for (agent_id, spec) in v.as_object().unwrap() {
+        if !spec.is_object() {
+            return Err(format!("{agent_id} 的覆写必须是对象"));
+        }
+        for key in spec.as_object().unwrap().keys() {
+            if key != "mcpConfigPaths" && key != "skillDirs" {
+                return Err(format!("{agent_id} 不支持字段 {key}（仅 mcpConfigPaths / skillDirs）"));
+            }
+        }
+    }
+    agenthub_core::store::Store::open_default()
+        .map_err(|e| e.to_string())?
+        .set_setting(agenthub_core::registry::OVERRIDES_KEY, raw.trim())
+        .map_err(|e| e.to_string())
+}
+
 /* ---------- 市场与收藏 ---------- */
 
 const SKILLSMP_KEY_SETTING: &str = "skillsmp_api_key";

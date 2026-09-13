@@ -18,13 +18,13 @@ impl ZcodeConnector {
         Self::new(crate::util::home_base())
     }
     pub fn new(base: PathBuf) -> Self {
-        Self {
-            desc: registry::descriptor("zcode"),
-            base,
-        }
+        Self::with_descriptor(registry::descriptor("zcode"), base)
+    }
+    pub fn with_descriptor(desc: AgentDescriptor, base: PathBuf) -> Self {
+        Self { desc, base }
     }
     fn config_path(&self) -> PathBuf {
-        self.base.join(".zcode").join("cli").join("config.json")
+        crate::util::primary_config_path(&self.desc, &self.base, ".zcode/cli/config.json")
     }
 }
 
