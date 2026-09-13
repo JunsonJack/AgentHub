@@ -309,51 +309,15 @@ pub fn apply_profile(
     overwrite: bool,
 ) -> Result<Vec<agenthub_core::model::ProfileApplyResult>, String> {
     let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
-    let items = store
-        .list_profile_items(profile_id)
-        .map_err(|e| e.to_string())?;
-    let mut out = vec![];
-    for (_, kind, ref_name, def_json) in items {
-        match kind.as_str() {
-            "skill" => {
-                for r in reg.deploy_skill(&ref_name, &agent_ids, overwrite) {
-                    out.push(agenthub_core::model::ProfileApplyResult {
-                        kind: "skill".into(),
-                        name: ref_name.clone(),
-                        agent_id: r.agent_id,
-                        ok: r.ok,
-                        error: r.error,
-                    });
-                }
-            }
-            "mcp" => {
-                let def: McpServerDef = match serde_json::from_str(&def_json) {
-                    Ok(d) => d,
-                    Err(e) => {
-                        out.push(agenthub_core::model::ProfileApplyResult {
-                            kind: "mcp".into(),
-                            name: ref_name.clone(),
-                            agent_id: agent_ids.join(","),
-                            ok: false,
-                            error: Some(format!("定义解析失败: {e}")),
-                        });
-                        continue;
-                    }
-                };
-                for r in reg.deploy_mcp(&agent_ids, &ref_name, &def) {
-                    out.push(agenthub_core::model::ProfileApplyResult {
-                        kind: "mcp".into(),
-                        name: ref_name.clone(),
-                        agent_id: r.agent_id,
-                        ok: r.ok,
-                        error: r.error,
-                    });
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(out)
+    agenthub_core::profiles::apply(
+        &reg,
+        &store,
+        &agenthub_core::util::app_data_dir(),
+        profile_id,
+        &agent_ids,
+        overwrite,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

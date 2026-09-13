@@ -250,8 +250,8 @@ fn is_secret_key(k: &str) -> bool {
 }
 
 /// env 合并策略：密钥类键——目标已有则保留本地值，否则占位符；
-/// 非密钥键照常从源同步。
-fn merge_env_for_target(
+/// 非密钥键照常从源同步。（同步引擎与 Profile 应用共用）
+pub(crate) fn merge_env_for_target(
     source_env: &Map<String, serde_json::Value>,
     target_env: Option<&Map<String, serde_json::Value>>,
 ) -> Map<String, serde_json::Value> {
