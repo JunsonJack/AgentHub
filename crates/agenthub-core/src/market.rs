@@ -125,6 +125,80 @@ pub(crate) fn get_status(url: &str) -> Result<u16> {
     Err(last_err.unwrap_or_else(|| CoreError::Other("网络请求失败".into())))
 }
 
+/// 工具箱用：抓取网页 <title> 与 meta description（截断防爆）
+pub fn fetch_url_metadata(url: &str) -> Result<(String, String)> {
+    let strategies = [env_proxy(), None];
+    let mut last_err: Option<CoreError> = None;
+    for proxy in strategies {
+        let res = agent_with_proxy(proxy)
+            .get(url)
+            .set("User-Agent", "Mozilla/5.0 AgentHub/0.1")
+            .call();
+        match res {
+            Ok(resp) => {
+                let html = resp.into_string().unwrap_or_default();
+                let title = extract_tag(&html, "title").unwrap_or_default();
+                let description = extract_meta_description(&html).unwrap_or_default();
+                return Ok((
+                    html_unescape(title.trim()),
+                    html_unescape(description.trim()),
+                ));
+            }
+            Err(e) => last_err = Some(CoreError::Other(format!("{e}"))),
+        }
+    }
+    Err(last_err.unwrap_or_else(|| CoreError::Other("网络请求失败".into())))
+}
+
+fn extract_tag(html: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}");
+    let start = html.to_lowercase().find(&open)?;
+    let after_open = &html[start..];
+    let content_start = after_open.find('>')? + 1;
+    let close = after_open[content_start..].to_lowercase().find(&format!("</{tag}>"))?;
+    Some(after_open[content_start..content_start + close].to_string())
+}
+
+fn extract_meta_description(html: &str) -> Option<String> {
+    let lower = html.to_lowercase();
+    let mut search = 0;
+    while let Some(pos) = lower[search..].find("<meta") {
+        let abs = search + pos;
+        let end = html[abs..].find('>')? + abs;
+        let tag = &html[abs..end];
+        let name_ok = tag.to_lowercase().contains("description");
+        let content = tag
+            .to_lowercase()
+            .find("content=")
+            .and_then(|ci| {
+                let rest = &tag[ci + 8..];
+                let quote = rest.chars().next()?;
+                if quote == '"' || quote == '\'' {
+                    let close = rest[1..].find(quote)? + 1;
+                    Some(rest[1..close].to_string())
+                } else {
+                    let end_pos = rest.find(|c: char| c == '>' || c == ' ')?;
+                    Some(rest[..end_pos].to_string())
+                }
+            });
+        if name_ok {
+            if let Some(c) = content {
+                return Some(c.chars().take(300).collect());
+            }
+        }
+        search = end;
+    }
+    None
+}
+
+fn html_unescape(s: &str) -> String {
+    s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+}
+
 /* ---------------- skills.sh ---------------- */
 
 #[derive(Deserialize)]

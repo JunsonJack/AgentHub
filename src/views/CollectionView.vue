@@ -47,7 +47,8 @@ async function refreshCollection() {
   try {
     const [c, u] = await Promise.all([listCurated(), listCollection()]);
     curated.value = c;
-    myItems.value = u;
+    // tool 类型归 AI 工具箱页管理，这里只显示 skill/mcp
+    myItems.value = u.filter((i) => i.kind !== "tool");
   } catch (e) {
     ElMessage.error(String(e));
   } finally {

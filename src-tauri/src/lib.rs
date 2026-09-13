@@ -36,6 +36,7 @@ pub fn run() {
             commands::plan_skill_sync,
             commands::apply_skill_sync,
             commands::propagate_mcp,
+            commands::fetch_url_metadata,
             commands::list_skills,
             commands::adopt_skill,
             commands::list_library,

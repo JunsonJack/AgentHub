@@ -208,6 +208,18 @@ pub fn propagate_mcp(
     Ok(agenthub_core::sync::propagate_mcp(&reg, &source_agent, &name, &target_agents))
 }
 
+/* ---------- AI 工具箱（P2，刻意做轻：卡片+笔记） ---------- */
+
+#[tauri::command]
+pub fn fetch_url_metadata(url: String) -> Result<serde_json::Value, String> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("URL 必须以 http(s):// 开头".into());
+    }
+    let (title, description) =
+        agenthub_core::market::fetch_url_metadata(&url).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "title": title, "description": description }))
+}
+
 /* ---------- 收藏集 ---------- */
 
 #[tauri::command]
