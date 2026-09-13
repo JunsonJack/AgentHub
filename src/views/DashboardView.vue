@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { ElMessage } from "element-plus";
 import { Refresh } from "@element-plus/icons-vue";
 import { useAgentsStore } from "../stores/agents";
+import { listHealthIssues } from "../api";
+import type { HealthIssue } from "../api/types";
 
 const store = useAgentsStore();
 const { agents, loading, loaded, error, installedCount } = storeToRefs(store);
+const issues = ref<HealthIssue[]>([]);
 
 async function refresh() {
   try {
     await store.fetchAll();
+    issues.value = await listHealthIssues();
   } catch {
     ElMessage.error(error.value || "读取 Agent 状态失败");
   }
@@ -38,11 +42,23 @@ onMounted(refresh);
       </el-col>
       <el-col :span="8">
         <el-card shadow="never">
-          <div class="stat-num">{{ agents.filter((a) => a.healthNote).length }}</div>
-          <div class="stat-label">待处理提醒</div>
+          <div class="stat-num">{{ issues.filter((i) => i.severity === "error").length }}</div>
+          <div class="stat-label">错误级健康问题（解析失败 / 非法条目）</div>
         </el-card>
       </el-col>
     </el-row>
+
+    <div v-if="issues.length" class="section-head">
+      <span class="section-title">待处理提醒</span>
+    </div>
+    <el-alert
+      v-for="(i, idx) in issues"
+      :key="idx"
+      :title="i.message"
+      :type="i.severity === 'error' ? 'error' : 'warning'"
+      :closable="false"
+      class="issue-alert"
+    />
 
     <div class="section-head">
       <span class="section-title">Agent 卡片墙</span>
@@ -99,4 +115,5 @@ onMounted(refresh);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .health-alert { margin-top: 10px; }
+.issue-alert { margin-bottom: 8px; }
 </style>

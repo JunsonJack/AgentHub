@@ -3,6 +3,7 @@ import type {
   AdoptReport,
   AgentStatus,
   DeployResult,
+  HealthIssue,
   InstallOutcome,
   KeyStatus,
   LibraryItem,
@@ -21,6 +22,10 @@ export function listAgents(): Promise<AgentStatus[]> {
 
 export function listMcpAll(): Promise<McpEntry[]> {
   return invoke<McpEntry[]>("list_mcp_all");
+}
+
+export function listHealthIssues(): Promise<HealthIssue[]> {
+  return invoke<HealthIssue[]>("list_health_issues");
 }
 
 export function deployMcp(

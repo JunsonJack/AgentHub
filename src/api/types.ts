@@ -110,3 +110,12 @@ export interface KeyStatus {
   set: boolean;
   masked: string | null;
 }
+
+export interface HealthIssue {
+  agentId: string;
+  /** "error" | "warning" */
+  severity: string;
+  code: string;
+  message: string;
+  path: string | null;
+}

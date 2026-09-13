@@ -78,6 +78,14 @@ impl Registry {
             .collect()
     }
 
+    /// 全量健康度检查（解析错误 / 非法条目 / 命令不可达 / skill 缺 SKILL.md）
+    pub fn health(&self) -> Vec<crate::model::HealthIssue> {
+        self.connectors
+            .iter()
+            .flat_map(|c| crate::health::check_connector(c.as_ref()))
+            .collect()
+    }
+
     fn find(&self, agent_id: &str) -> Result<&dyn Connector> {
         self.connectors
             .iter()

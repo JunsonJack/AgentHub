@@ -166,6 +166,19 @@ pub struct MarketPreview {
     pub files: Vec<String>,
 }
 
+/// 配置健康度问题（P0：仪表盘健康度 + 失效条目检测）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthIssue {
+    pub agent_id: String,
+    /// "error" | "warning"
+    pub severity: String,
+    /// CONFIG_PARSE_ERROR | MCP_ENTRY_INVALID | MCP_CMD_NOT_FOUND | SKILL_NO_SKILLMD
+    pub code: String,
+    pub message: String,
+    pub path: Option<String>,
+}
+
 /// 市场安装结果：入库报告 + 各 Agent 部署结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

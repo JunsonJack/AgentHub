@@ -9,6 +9,7 @@
 
 pub mod connector;
 pub mod error;
+pub mod health;
 pub mod library;
 pub mod market;
 pub mod model;

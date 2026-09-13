@@ -130,7 +130,13 @@ pub fn status_of(c: &dyn Connector) -> crate::model::AgentStatus {
     let desc = c.descriptor().clone();
     match c.detect() {
         Ok(mut st) => {
-            st.mcp_count = c.list_mcp().ok().map(|v| v.len());
+            match c.list_mcp() {
+                Ok(v) => st.mcp_count = Some(v.len()),
+                Err(e) => {
+                    // 解析失败属于健康度问题，直接浮出到仪表盘
+                    st.health_note = Some(format!("MCP 配置解析失败：{e}"));
+                }
+            }
             if st.installed && st.skill_count.is_none() {
                 st.skill_count = count_skills(&desc.skill_dirs, c.base_dir());
             }

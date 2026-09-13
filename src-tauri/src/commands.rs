@@ -16,6 +16,11 @@ pub fn list_mcp_all(reg: State<Registry>) -> Result<Vec<McpEntry>, String> {
 }
 
 #[tauri::command]
+pub fn list_health_issues(reg: State<Registry>) -> Result<Vec<agenthub_core::model::HealthIssue>, String> {
+    Ok(reg.health())
+}
+
+#[tauri::command]
 pub fn deploy_mcp(
     reg: State<Registry>,
     agent_ids: Vec<String>,
