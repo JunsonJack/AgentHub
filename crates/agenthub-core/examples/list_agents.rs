@@ -28,4 +28,19 @@ fn main() {
         let target = e.command.as_deref().or(e.url.as_deref()).unwrap_or("-");
         println!("{:<12} {:<24} {:<12} {}", e.agent_id, e.name, e.scope, target);
     }
+
+    println!("\n=== Skill 条目（前 12 个） ===");
+    let skills = reg.all_skills();
+    for s in skills.iter().take(12) {
+        println!(
+            "{:<12} {:<20} {:<8} {}",
+            s.agent_id,
+            s.name,
+            if s.scope == "user" { "user" } else { "project" },
+            s.description.as_deref().unwrap_or("-")
+        );
+    }
+    println!("共 {} 个 skill；中央库现有 {} 个条目", skills.len(), {
+        agenthub_core::library::list_library().len()
+    });
 }

@@ -4,8 +4,10 @@ use std::sync::OnceLock;
 use serde::Deserialize;
 
 use crate::connector::{self, Connector};
-use crate::error::Result;
-use crate::model::{AgentDescriptor, AgentStatus, McpEntry};
+use crate::error::{CoreError, Result};
+use crate::model::{
+    AgentDescriptor, AgentStatus, DeployResult, McpEntry, McpServerDef, SkillEntry,
+};
 
 pub const REGISTRY_JSON: &str = include_str!("registry.json");
 
@@ -66,5 +68,78 @@ impl Registry {
             .iter()
             .flat_map(|c| c.list_mcp().unwrap_or_default())
             .collect()
+    }
+
+    /// 跨 Agent 汇总的 Skill 条目
+    pub fn all_skills(&self) -> Vec<SkillEntry> {
+        self.connectors
+            .iter()
+            .flat_map(|c| c.list_skills().unwrap_or_default())
+            .collect()
+    }
+
+    fn find(&self, agent_id: &str) -> Result<&dyn Connector> {
+        self.connectors
+            .iter()
+            .find(|c| c.descriptor().id == agent_id)
+            .map(|c| c.as_ref())
+            .ok_or_else(|| CoreError::NotFound(format!("agent {agent_id}")))
+    }
+
+    /// 把一个 MCP server 定义批量下发到多个 Agent（写入前各连接器自动快照）
+    pub fn deploy_mcp(
+        &self,
+        agent_ids: &[String],
+        name: &str,
+        def: &McpServerDef,
+    ) -> Vec<DeployResult> {
+        if let Err(e) = connector::validate_def(def) {
+            return agent_ids
+                .iter()
+                .map(|id| DeployResult {
+                    agent_id: id.clone(),
+                    ok: false,
+                    error: Some(e.to_string()),
+                    backup_path: None,
+                })
+                .collect();
+        }
+        agent_ids
+            .iter()
+            .map(|id| match self.find(id).and_then(|c| c.upsert_mcp(name, def)) {
+                Ok(r) => DeployResult {
+                    agent_id: id.clone(),
+                    ok: true,
+                    error: None,
+                    backup_path: r.backup_path,
+                },
+                Err(e) => DeployResult {
+                    agent_id: id.clone(),
+                    ok: false,
+                    error: Some(e.to_string()),
+                    backup_path: None,
+                },
+            })
+            .collect()
+    }
+
+    pub fn remove_mcp_for(&self, agent_id: &str, name: &str, scope: &str) -> Result<connector::WriteReport> {
+        self.find(agent_id)?.remove_mcp(name, scope)
+    }
+
+    /// 收编：按 (agent, skill 名, 作用域) 定位目录后拷入中央库
+    pub fn adopt_skill(
+        &self,
+        agent_id: &str,
+        skill_name: &str,
+        scope: &str,
+        dry_run: bool,
+    ) -> Result<crate::model::AdoptReport> {
+        let entry = self
+            .all_skills()
+            .into_iter()
+            .find(|s| s.agent_id == agent_id && s.name == skill_name && s.scope == scope)
+            .ok_or_else(|| CoreError::NotFound(format!("{skill_name} @ {agent_id}/{scope}")))?;
+        crate::library::adopt(std::path::Path::new(&entry.dir), agent_id, dry_run)
     }
 }

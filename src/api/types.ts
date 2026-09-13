@@ -22,3 +22,59 @@ export interface McpEntry {
   url: string | null;
   raw: Record<string, unknown>;
 }
+
+/** 下发用受控定义（未知字段进 extra，serde flatten） */
+export interface McpServerDef {
+  command?: string;
+  args?: string[];
+  url?: string;
+  env?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface WriteReport {
+  backupPath: string | null;
+  changed: boolean;
+}
+
+export interface DeployResult {
+  agentId: string;
+  ok: boolean;
+  error: string | null;
+  backupPath: string | null;
+}
+
+export interface SkillEntry {
+  agentId: string;
+  name: string;
+  /** "user" 或 "project:<路径>" */
+  scope: string;
+  dir: string;
+  description: string | null;
+  hasSkillMd: boolean;
+}
+
+export interface LibraryItem {
+  name: string;
+  kind: string;
+  sourceAgent: string | null;
+  sourcePath: string | null;
+  description: string | null;
+  adoptedAt: number;
+  fileCount: number;
+}
+
+export interface AdoptReport {
+  dryRun: boolean;
+  skillName: string;
+  targetDir: string;
+  files: string[];
+  conflict: boolean;
+}
+
+export interface SnapshotMeta {
+  id: string;
+  fileName: string;
+  originalPath: string;
+  createdAt: number;
+}

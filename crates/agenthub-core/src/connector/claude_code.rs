@@ -1,11 +1,13 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::{CoreError, Result};
-use crate::model::{AgentDescriptor, McpEntry, McpServerDef};
+use crate::model::{AgentDescriptor, McpEntry, McpServerDef, SkillEntry};
 use crate::registry;
 
 use super::json_config::{def_to_json, entries_from_map, obj_at, read_json, write_json_preserving};
-use super::{count_skills, detect_by_paths, Connector, WriteReport};
+use super::{
+    count_skills, detect_by_paths, scan_skill_dir, scan_skill_dirs, Connector, WriteReport,
+};
 
 /// Claude Code：`~/.claude.json`（严格 JSON）。
 /// 全局 MCP 在顶层 `mcpServers`，项目级在各 `projects.<路径>.mcpServers`。
@@ -50,7 +52,8 @@ impl Connector for ClaudeCodeConnector {
         }
         let root = read_json(&path)?;
         let mut out = vec![];
-        if let Some(servers) = root.get("mcpServers").and_then(|v| v.as_object()) {            out.extend(entries_from_map("claude-code", "global", servers));
+        if let Some(servers) = root.get("mcpServers").and_then(|v| v.as_object()) {
+            out.extend(entries_from_map("claude-code", "global", servers));
         }
         if let Some(projects) = root.get("projects").and_then(|v| v.as_object()) {
             for (proj, obj) in projects {
@@ -59,6 +62,29 @@ impl Connector for ClaudeCodeConnector {
                         "claude-code",
                         &format!("project:{proj}"),
                         servers,
+                    ));
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// user 级之外，还扫各项目的 <project>/.claude/skills
+    fn list_skills(&self) -> Result<Vec<SkillEntry>> {
+        let mut out = scan_skill_dirs(&self.desc.skill_dirs, &self.base, "claude-code");
+        let path = self.config_path();
+        if !path.exists() {
+            return Ok(out);
+        }
+        let root = read_json(&path)?;
+        if let Some(projects) = root.get("projects").and_then(|v| v.as_object()) {
+            for proj in projects.keys() {
+                let dir = PathBuf::from(proj).join(".claude").join("skills");
+                if dir.is_dir() {
+                    out.extend(scan_skill_dir(
+                        "claude-code",
+                        &dir,
+                        &format!("project:{proj}"),
                     ));
                 }
             }

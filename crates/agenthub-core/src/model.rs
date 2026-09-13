@@ -82,3 +82,61 @@ pub struct McpServerDef {
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillEntry {
+    pub agent_id: String,
+    /// 目录名（skill 的稳定标识）
+    pub name: String,
+    /// "user" 或 "project:<路径>"
+    pub scope: String,
+    /// 绝对路径
+    pub dir: String,
+    pub description: Option<String>,
+    pub has_skill_md: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryItem {
+    pub name: String,
+    /// "skill"
+    pub kind: String,
+    pub source_agent: Option<String>,
+    pub source_path: Option<String>,
+    pub description: Option<String>,
+    pub adopted_at: u64,
+    pub file_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdoptReport {
+    pub dry_run: bool,
+    pub skill_name: String,
+    pub target_dir: String,
+    /// 相对文件路径清单（dry-run 即"将要复制什么"）
+    pub files: Vec<String>,
+    /// 目标已存在（拒绝覆盖，遵循"绝不代删"语义）
+    pub conflict: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotMeta {
+    /// 快照目录名（unix 毫秒）
+    pub id: String,
+    pub file_name: String,
+    pub original_path: String,
+    pub created_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeployResult {
+    pub agent_id: String,
+    pub ok: bool,
+    pub error: Option<String>,
+    pub backup_path: Option<String>,
+}
