@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { Odometer, Connection, Files, Star, Box, Setting } from "@element-plus/icons-vue";
+import { Odometer, Connection, Files, Star, Box, MagicStick, Setting } from "@element-plus/icons-vue";
 
 const route = useRoute();
 const title = computed(() => (route.meta.title as string) ?? "AgentHub");
@@ -23,6 +23,7 @@ const title = computed(() => (route.meta.title as string) ?? "AgentHub");
         <el-menu-item index="/skills"><el-icon><Files /></el-icon><span>Skill 管理中心</span></el-menu-item>
         <el-menu-item index="/collection"><el-icon><Star /></el-icon><span>市场与收藏</span></el-menu-item>
         <el-menu-item index="/toolbox"><el-icon><Box /></el-icon><span>AI 工具箱</span></el-menu-item>
+        <el-menu-item index="/profiles"><el-icon><MagicStick /></el-icon><span>配置 Profile</span></el-menu-item>
         <el-menu-item index="/settings"><el-icon><Setting /></el-icon><span>设置</span></el-menu-item>
       </el-menu>
     </el-aside>

@@ -10,6 +10,7 @@ const router = createRouter({
     { path: "/collection", name: "collection", component: () => import("../views/CollectionView.vue"), meta: { title: "市场与收藏" } },
     { path: "/toolbox", name: "toolbox", component: () => import("../views/ToolboxView.vue"), meta: { title: "AI 工具箱" } },
     { path: "/settings", name: "settings", component: () => import("../views/SettingsView.vue"), meta: { title: "设置" } },
+    { path: "/profiles", name: "profiles", component: () => import("../views/ProfilesView.vue"), meta: { title: "配置 Profile" } },
   ],
 });
 
