@@ -415,28 +415,5 @@ fn staging_dir() -> Result<PathBuf> {
 }
 
 fn extract_desc_from_md(md: &str) -> Option<String> {
-    let mut lines = md.lines();
-    if lines.next()?.trim() != "---" {
-        return None;
-    }
-    let mut desc: Option<String> = None;
-    for line in lines {
-        let t = line.trim();
-        if t == "---" {
-            break;
-        }
-        if let Some(v) = t.strip_prefix("description:") {
-            desc = Some(v.trim().trim_matches('"').trim_matches('\'').to_string());
-        } else if let Some(d) = desc.as_mut() {
-            // 折叠块与续行（"> ..."、缩进、"- ..."）
-            let cont = t.starts_with('>') || t.starts_with('-') || line.starts_with(' ');
-            if cont {
-                d.push(' ');
-                d.push_str(t.trim_start_matches(['>', '-']).trim());
-            } else if !t.is_empty() {
-                break; // 遇到下一个键
-            }
-        }
-    }
-    desc.filter(|s| !s.is_empty())
+    crate::connector::parse_frontmatter_str(md).1
 }

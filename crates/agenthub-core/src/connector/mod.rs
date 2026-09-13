@@ -141,34 +141,136 @@ pub fn scan_skill_dirs(dirs: &OsPaths, base: &Path, agent_id: &str) -> Vec<Skill
     out
 }
 
-/// 极简 YAML frontmatter 解析：只取 name / description 两个键
+/// 极简 YAML frontmatter 解析：只关心 name / description。
+/// 支持：单行值、单双引号、行内注释、折叠块（>）、字面块（|）、CRLF。
 pub fn parse_frontmatter(path: &Path) -> (Option<String>, Option<String>) {
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return (None, None);
-    };
+    match std::fs::read_to_string(path) {
+        Ok(text) => parse_frontmatter_str(&text),
+        Err(_) => (None, None),
+    }
+}
+
+pub fn parse_frontmatter_str(text: &str) -> (Option<String>, Option<String>) {
+    let text = text.replace("\r\n", "\n");
     let mut lines = text.lines();
-    if lines.next().map(str::trim) != Some("---") {
+    if lines.next().map(str::trim_end) != Some("---") {
         return (None, None);
     }
-    let mut name = None;
-    let mut description = None;
+
+    #[derive(PartialEq)]
+    enum Target {
+        Name,
+        Desc,
+    }
+    let mut name: Option<String> = None;
+    let mut desc: Option<String> = None;
+    let mut target: Option<Target> = None;
+    let mut in_block = false;
+
     for line in lines {
         let trimmed = line.trim();
         if trimmed == "---" {
             break;
         }
-        if let Some(v) = trimmed.strip_prefix("name:") {
-            name = Some(clean_yaml_value(v));
-        } else if let Some(v) = trimmed.strip_prefix("description:") {
-            description = Some(clean_yaml_value(v));
+        let indent = line.len() - line.trim_start().len();
+
+        if in_block {
+            if trimmed.is_empty() {
+                continue; // 块内空行折叠为空格
+            }
+            if indent > 0 {
+                let piece = trimmed.trim_start_matches("- ").trim();
+                let slot = match target {
+                    Some(Target::Name) => &mut name,
+                    Some(Target::Desc) => &mut desc,
+                    None => unreachable!(),
+                };
+                if let Some(v) = slot {
+                    v.push(' ');
+                    v.push_str(piece);
+                }
+                continue;
+            }
+            in_block = false;
+            target = None;
+            // 非缩进行继续走下面的键解析
+        }
+
+        let Some((key, value)) = split_key(trimmed) else {
+            continue;
+        };
+        let t = match key {
+            "name" if name.is_none() => {
+                target = Some(Target::Name);
+                &mut name
+            }
+            "description" if desc.is_none() => {
+                target = Some(Target::Desc);
+                &mut desc
+            }
+            _ => continue,
+        };
+        let v = value.trim();
+        if v == ">" || v == ">-" || v == ">+" || v == "|" || v == "|-" || v == "|+" {
+            in_block = true;
+            *t = Some(String::new());
+        } else {
+            *t = Some(clean_yaml_value(v));
+            target = None;
         }
     }
-    (name, description)
+
+    let norm = |s: Option<String>| s.map(|v| collapse_spaces(&v)).filter(|v| !v.is_empty());
+    (norm(name), norm(desc))
+}
+
+/// 拆 "key: value"（key 不含空格），返回 (key, 其余部分)
+fn split_key(line: &str) -> Option<(&str, &str)> {
+    let idx = line.find(':')?;
+    let key = &line[..idx];
+    if key.is_empty() || key.contains(' ') || key.contains('\t') {
+        return None;
+    }
+    Some((key, &line[idx + 1..]))
 }
 
 fn clean_yaml_value(v: &str) -> String {
-    let t = v.trim();
-    t.trim_matches('"').trim_matches('\'').to_string()
+    let v = v.trim();
+    // 单引号：'' 是转义的 '
+    if let Some(rest) = v.strip_prefix('\'') {
+        let mut out = String::new();
+        let mut iter = rest.chars().peekable();
+        while let Some(c) = iter.next() {
+            if c == '\'' {
+                if iter.peek() == Some(&'\'') {
+                    out.push('\'');
+                    iter.next();
+                } else {
+                    return out; // 结束引号
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        return out;
+    }
+    // 双引号：取到匹配的结束引号
+    if let Some(rest) = v.strip_prefix('"') {
+        if let Some(end) = rest.find('"') {
+            return rest[..end].to_string();
+        }
+        return rest.to_string();
+    }
+    // 行内注释：` #` 之后截断
+    let v = match v.find(" #") {
+        Some(pos) => &v[..pos],
+        None => v,
+    };
+    v.trim().to_string()
+}
+
+fn collapse_spaces(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// 默认探测：任一配置路径或 skill 目录存在即视为已安装
