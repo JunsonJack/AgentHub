@@ -2,9 +2,9 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Delete, Edit, Link, Refresh, Search, SwitchButton, Upload } from "@element-plus/icons-vue";
+import { Delete, Edit, Link, Refresh, Search, Share, SwitchButton, Upload } from "@element-plus/icons-vue";
 import { useAgentsStore } from "../stores/agents";
-import { deployMcp, disableMcp, enableMcp, listDisabledMcp, removeMcp, testMcp, testMcpDef } from "../api";
+import { deployMcp, disableMcp, enableMcp, listDisabledMcp, propagateMcp, removeMcp, testMcp, testMcpDef } from "../api";
 import type { ConnectivityResult, DisabledRecord, McpEntry, McpServerDef } from "../api/types";
 
 const store = useAgentsStore();
@@ -31,6 +31,42 @@ const filtered = computed(() =>
 
 const transportTag = (t: string) => (t === "stdio" ? "success" : t === "unknown" ? "info" : "warning");
 const scopeLabel = (s: string) => (s === "global" ? "全局" : s.startsWith("project:") ? "项目" : s);
+
+/* ---------- 跨 Agent 同步（MCP） ---------- */
+
+const syncVisible = ref(false);
+const syncSourceEntry = ref<McpEntry | null>(null);
+const syncTargetAgents = ref<string[]>([]);
+const syncingMcp = ref(false);
+const syncMcpResults = ref<import("../api/types").DeployResult[] | null>(null);
+
+function openMcpSync(entry: McpEntry) {
+  syncSourceEntry.value = entry;
+  syncTargetAgents.value = [];
+  syncMcpResults.value = null;
+  syncVisible.value = true;
+}
+
+async function confirmMcpSync() {
+  const entry = syncSourceEntry.value;
+  if (!entry || !syncTargetAgents.value.length) {
+    ElMessage.warning("请勾选目标 Agent");
+    return;
+  }
+  syncingMcp.value = true;
+  try {
+    const results = await propagateMcp(entry.agentId, entry.name, syncTargetAgents.value);
+    syncMcpResults.value = results;
+    const ok = results.filter((r) => r.ok).length;
+    if (ok) ElMessage.success(`已传播到 ${ok} 个 Agent（含 env 的密钥按规则处理）`);
+    results.filter((r) => !r.ok).forEach((r) => ElMessage.error(`${agentName(r.agentId)}: ${r.error}`));
+    await refresh();
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    syncingMcp.value = false;
+  }
+}
 
 /* ---------- 覆盖矩阵（按 server 去重分组） ---------- */
 
@@ -375,7 +411,7 @@ onMounted(refresh);
           <code class="cmd">{{ row.command ?? row.url ?? "—" }}</code>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="290" fixed="right">
+      <el-table-column label="操作" width="350" fixed="right">
         <template #default="{ row }">
           <el-button
             size="small"
@@ -390,6 +426,13 @@ onMounted(refresh);
             :loading="testingKey === `${row.agentId}|${row.name}|${row.scope}`"
             @click="onTest(row)"
           >测试</el-button>
+          <el-button
+            size="small"
+            :icon="Share"
+            :disabled="row.scope !== 'global'"
+            :title="row.scope !== 'global' ? '项目级条目不支持同步' : ''"
+            @click="openMcpSync(row)"
+          >同步</el-button>
           <el-button
             size="small"
             type="warning"
@@ -427,6 +470,39 @@ onMounted(refresh);
         </el-table-column>
       </el-table>
     </div>
+
+    <!-- MCP 同步对话框 -->
+    <el-dialog v-model="syncVisible" :title="`同步 MCP：${syncSourceEntry?.name ?? ''}（源：${agentName(syncSourceEntry?.agentId ?? '')}）`" width="460px">
+      <el-form label-position="top">
+        <el-form-item label="目标 Agent" required>
+          <el-checkbox-group v-model="syncTargetAgents">
+            <el-checkbox
+              v-for="a in agents.filter((x) => !syncSourceEntry || x.id !== syncSourceEntry.agentId)"
+              :key="a.id"
+              :value="a.id"
+              :label="a.name"
+            />
+          </el-checkbox-group>
+        </el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          title="密钥保护规则"
+          description="TOKEN/KEY/SECRET 等密钥类 env：目标已有则保留本地值，没有则写占位符；其余 env 照常同步。写入前自动快照。"
+        />
+        <template v-if="syncMcpResults">
+          <el-divider />
+          <div v-for="r in syncMcpResults" :key="r.agentId" class="deploy-line">
+            <el-tag size="small" :type="r.ok ? 'success' : 'danger'">{{ agentName(r.agentId) }}</el-tag>
+            <span class="sync-err">{{ r.error ?? "完成" }}</span>
+          </div>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="syncVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="syncingMcp" @click="confirmMcpSync">执行同步</el-button>
+      </template>
+    </el-dialog>
 
     <el-drawer v-model="drawerVisible" :title="isNew ? '新增 MCP server 并下发' : `编辑：${form.name}`" size="520px">
       <el-form label-position="top">
@@ -488,4 +564,5 @@ onMounted(refresh);
 .disabled-section { margin-top: 20px; }
 .disabled-head { font-weight: 600; margin-bottom: 10px; }
 .agent-tag { margin-right: 6px; margin-bottom: 2px; }
+.sync-err { font-size: 12px; color: var(--el-text-color-secondary); word-break: break-all; }
 </style>

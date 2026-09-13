@@ -171,6 +171,43 @@ pub fn test_mcp_def(
     Ok(agenthub_core::runner::test_def(&def))
 }
 
+/* ---------- 跨 Agent 同步 ---------- */
+
+#[tauri::command]
+pub fn plan_skill_sync(
+    reg: State<Registry>,
+    source_agent: String,
+    skill_name: String,
+    scope: String,
+    target_agent: String,
+) -> Result<agenthub_core::sync::PropagatePlan, String> {
+    agenthub_core::sync::plan_skill_sync(&reg, &source_agent, &skill_name, &scope, &target_agent)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn apply_skill_sync(
+    reg: State<Registry>,
+    source_agent: String,
+    skill_name: String,
+    scope: String,
+    plan: agenthub_core::sync::PropagatePlan,
+    delete_confirmed: bool,
+) -> Result<agenthub_core::sync::SyncReport, String> {
+    agenthub_core::sync::apply_skill_sync(&reg, &source_agent, &skill_name, &scope, &plan, delete_confirmed)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn propagate_mcp(
+    reg: State<Registry>,
+    source_agent: String,
+    name: String,
+    target_agents: Vec<String>,
+) -> Result<Vec<agenthub_core::model::DeployResult>, String> {
+    Ok(agenthub_core::sync::propagate_mcp(&reg, &source_agent, &name, &target_agents))
+}
+
 /* ---------- 收藏集 ---------- */
 
 #[tauri::command]

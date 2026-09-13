@@ -17,8 +17,10 @@ import type {
   ProfileApplyResult,
   ProfileItem,
   ProfileMeta,
+  PropagatePlan,
   SkillEntry,
   SnapshotMeta,
+  SyncReport,
   TrashItem,
   WriteReport,
 } from "./types";
@@ -248,4 +250,33 @@ export function applyProfile(
   overwrite: boolean
 ): Promise<ProfileApplyResult[]> {
   return invoke<ProfileApplyResult[]>("apply_profile", { profileId, agentIds, overwrite });
+}
+
+/* ---------- 同步引擎 ---------- */
+
+export function planSkillSync(
+  sourceAgent: string,
+  skillName: string,
+  scope: string,
+  targetAgent: string
+): Promise<PropagatePlan> {
+  return invoke<PropagatePlan>("plan_skill_sync", { sourceAgent, skillName, scope, targetAgent });
+}
+
+export function applySkillSync(
+  sourceAgent: string,
+  skillName: string,
+  scope: string,
+  plan: PropagatePlan,
+  deleteConfirmed: boolean
+): Promise<SyncReport> {
+  return invoke<SyncReport>("apply_skill_sync", { sourceAgent, skillName, scope, plan, deleteConfirmed });
+}
+
+export function propagateMcp(
+  sourceAgent: string,
+  name: string,
+  targetAgents: string[]
+): Promise<DeployResult[]> {
+  return invoke<DeployResult[]>("propagate_mcp", { sourceAgent, name, targetAgents });
 }

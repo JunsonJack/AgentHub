@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Collection, Delete, FolderAdd, Refresh, Search, View } from "@element-plus/icons-vue";
+import { Collection, Delete, FolderAdd, Refresh, Search, SwitchButton, View } from "@element-plus/icons-vue";
 import {
   adoptSkill,
+  applySkillSync,
   importSkillFolder,
   listLibrary,
   listSkills,
+  planSkillSync,
   readLibrarySkill,
   readSkillMd,
   removeSkill,
 } from "../api";
-import type { AdoptReport, LibraryItem, SkillEntry } from "../api/types";
+import type { AdoptReport, LibraryItem, PropagatePlan, SkillEntry, SyncReport } from "../api/types";
 import { renderMarkdown } from "../utils/markdown";
 
 const activeTab = ref("agents");
@@ -192,6 +194,75 @@ async function confirmImport() {
   }
 }
 
+/* ---------- 跨 Agent 同步 ---------- */
+
+const syncVisible = ref(false);
+const syncSource = ref<SkillEntry | null>(null);
+const syncTargets = ref<string[]>([]);
+const syncPlans = ref<Record<string, PropagatePlan | null>>({});
+const syncReports = ref<Record<string, SyncReport | null>>({});
+const syncDelete = ref(false);
+const syncing = ref(false);
+const planning = ref(false);
+
+const otherAgents = computed(() =>
+  skills.value
+    .map((s) => s.agentId)
+    .filter((id, i, arr) => arr.indexOf(id) === i && (!syncSource.value || id !== syncSource.value.agentId))
+);
+
+async function openSync(s: SkillEntry) {
+  syncSource.value = s;
+  syncTargets.value = [];
+  syncPlans.value = {};
+  syncReports.value = {};
+  syncDelete.value = false;
+  syncVisible.value = true;
+}
+
+async function buildPlans() {
+  const s = syncSource.value;
+  if (!s || !syncTargets.value.length) {
+    ElMessage.warning("请先勾选目标 Agent，再生成差异预览");
+    return;
+  }
+  planning.value = true;
+  try {
+    const next: Record<string, PropagatePlan | null> = {};
+    for (const t of syncTargets.value) {
+      next[t] = await planSkillSync(s.agentId, s.name, s.scope, t);
+    }
+    syncPlans.value = next;
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    planning.value = false;
+  }
+}
+
+async function confirmSync() {
+  const s = syncSource.value;
+  if (!s || !syncTargets.value.length) return;
+  syncing.value = true;
+  try {
+    const reports: Record<string, SyncReport | null> = {};
+    for (const t of syncTargets.value) {
+      const plan = syncPlans.value[t];
+      if (!plan || plan.identical) {
+        reports[t] = null;
+        continue;
+      }
+      reports[t] = await applySkillSync(s.agentId, s.name, s.scope, plan, syncDelete.value);
+    }
+    syncReports.value = reports;
+    ElMessage.success("同步完成（删除差异按你的确认处理）");
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    syncing.value = false;
+  }
+}
+
 onMounted(refresh);
 </script>
 
@@ -228,10 +299,11 @@ onMounted(refresh);
           <el-table-column label="描述" min-width="260">
             <template #default="{ row }">{{ row.description ?? "—" }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="230" fixed="right">
+          <el-table-column label="操作" width="290" fixed="right">
             <template #default="{ row }">
               <el-button size="small" :icon="View" @click="openAgentSkillDetail(row)">详情</el-button>
               <el-button size="small" type="primary" plain :icon="Collection" @click="startAdopt(row)">收编</el-button>
+              <el-button size="small" :icon="SwitchButton" @click="openSync(row)">同步…</el-button>
               <el-button size="small" type="danger" plain :icon="Delete" @click="onDelete(row)" />
             </template>
           </el-table-column>
@@ -272,6 +344,52 @@ onMounted(refresh);
       <div v-if="renderedMd" class="md-body" v-html="renderedMd"></div>
       <div v-else class="md-empty">（无 SKILL.md 内容）</div>
     </el-drawer>
+
+    <!-- 同步对话框 -->
+    <el-dialog v-model="syncVisible" :title="`同步：${syncSource?.name ?? ''}（源：${syncSource?.agentId ?? ''}）`" width="560px">
+      <el-form label-position="top">
+        <el-form-item label="目标 Agent" required>
+          <el-checkbox-group v-model="syncTargets" @change="syncPlans = {}; syncReports = {}">
+            <el-checkbox v-for="a in otherAgents" :key="a" :value="a" :label="a" />
+          </el-checkbox-group>
+          <div v-if="!otherAgents.length" class="hint">只有一个 Agent 有 skill，没有可同步的目标</div>
+        </el-form-item>
+        <el-button size="small" :loading="planning" @click="buildPlans">生成差异预览</el-button>
+
+        <div v-for="(plan, t) in syncPlans" :key="t" class="plan-block">
+          <template v-if="plan">
+            <div class="plan-head">
+              <b>{{ t }}</b>
+              <el-tag v-if="plan.identical" size="small" type="info">完全一致，无需同步</el-tag>
+              <el-tag v-else-if="plan.targetAbsent" size="small" type="success">目标没有，将整体安装（{{ plan.copy.length }} 个文件）</el-tag>
+              <template v-else>
+                <el-tag size="small" type="warning">更新 {{ plan.copy.length }} 个</el-tag>
+                <el-tag size="small" type="danger" effect="plain">目标多出 {{ plan.deletions.length }} 个</el-tag>
+              </template>
+            </div>
+            <div v-if="plan.copy.length" class="plan-files">复制：{{ plan.copy.join("、") }}</div>
+            <div v-if="plan.deletions.length" class="plan-files del">
+              目标多出：{{ plan.deletions.join("、") }}
+              <el-checkbox v-model="syncDelete" class="del-check">确认删除这些文件</el-checkbox>
+            </div>
+          </template>
+          <div v-else-if="syncReports[t] === null" class="plan-head">{{ t }}：无需变动</div>
+          <template v-else-if="syncReports[t]">
+            <div class="plan-head">{{ t }}：已复制 {{ syncReports[t]!.copied }} 个，删除 {{ syncReports[t]!.deleted }} 个</div>
+            <div v-if="syncReports[t]!.heldBackDeletions.length" class="plan-files del">
+              扣留未删：{{ syncReports[t]!.heldBackDeletions.join("、") }}
+            </div>
+            <div class="plan-files">快照：{{ syncReports[t]!.backupDir }}</div>
+          </template>
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="syncVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="syncing" :disabled="!syncTargets.length || !Object.keys(syncPlans).length" @click="confirmSync">
+          执行同步
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 文件夹导入对话框 -->
     <el-dialog v-model="importDialogVisible" title="从文件夹导入 skill" width="480px">
@@ -362,4 +480,10 @@ onMounted(refresh);
 .path { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; }
 .mono :deep(textarea) { font-family: Consolas, monospace; }
 .mt { margin-top: 12px; }
+.plan-block { border: 1px solid var(--el-border-color-lighter); border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+.plan-head { margin-bottom: 6px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.plan-files { font-size: 12px; color: var(--el-text-color-secondary); font-family: Consolas, monospace; word-break: break-all; }
+.plan-files.del { color: var(--el-color-danger); }
+.del-check { margin-left: 10px; }
+.hint { font-size: 12px; color: var(--el-text-color-secondary); }
 </style>

@@ -176,3 +176,20 @@ export interface ProfileApplyResult {
   ok: boolean;
   error: string | null;
 }
+
+export interface PropagatePlan {
+  targetAgent: string;
+  targetDir: string;
+  copy: string[];
+  deletions: string[];
+  targetAbsent: boolean;
+  identical: boolean;
+}
+
+export interface SyncReport {
+  targetAgent: string;
+  copied: number;
+  deleted: number;
+  heldBackDeletions: string[];
+  backupDir: string | null;
+}

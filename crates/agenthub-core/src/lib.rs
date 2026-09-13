@@ -18,6 +18,7 @@ pub mod registry;
 pub mod runner;
 pub mod snapshot;
 pub mod store;
+pub mod sync;
 pub mod trash;
 pub mod util;
 

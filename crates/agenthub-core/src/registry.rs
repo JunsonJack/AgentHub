@@ -145,6 +145,11 @@ impl Registry {
             .ok_or_else(|| CoreError::NotFound(format!("agent {agent_id}")))
     }
 
+    /// 同步引擎等需要按 id 取连接器（路径声明等）
+    pub fn find_connector(&self, agent_id: &str) -> Result<&dyn Connector> {
+        self.find(agent_id)
+    }
+
     /// 把一个 MCP server 定义批量下发到多个 Agent（写入前各连接器自动快照）
     pub fn deploy_mcp(
         &self,
