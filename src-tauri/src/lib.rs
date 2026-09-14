@@ -33,6 +33,8 @@ pub fn run() {
             commands::create_profile,
             commands::delete_profile,
             commands::apply_profile,
+            commands::check_library_update,
+            commands::apply_library_update,
             commands::plan_skill_sync,
             commands::apply_skill_sync,
             commands::propagate_mcp,

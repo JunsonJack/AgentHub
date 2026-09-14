@@ -6,6 +6,8 @@ import { useAgentsStore } from "../stores/agents";
 import { storeToRefs } from "pinia";
 import {
   addCollectionItem,
+  applyLibraryUpdate,
+  checkLibraryUpdate,
   deployLibrarySkill,
   deleteCollectionItem,
   listCollection,
@@ -17,7 +19,16 @@ import {
   marketSearch,
   updateCollectionItem,
 } from "../api";
-import type { AdoptReport, CollectionEntry, DeployResult, LibraryItem, MarketPreview, MarketSkill } from "../api/types";
+import type {
+  AdoptReport,
+  CollectionEntry,
+  DeployResult,
+  LibraryItem,
+  MarketPreview,
+  MarketSkill,
+  UpdateApplyReport,
+  UpdateCheck,
+} from "../api/types";
 
 const agentsStore = useAgentsStore();
 const { agents } = storeToRefs(agentsStore);
@@ -264,6 +275,8 @@ async function confirmInstall() {
 const library = ref<LibraryItem[]>([]);
 const libraryLoading = ref(false);
 
+const isCheckable = (source: string) => source.startsWith("git:") || source.startsWith("skills.sh:");
+
 async function refreshLibrary() {
   libraryLoading.value = true;
   try {
@@ -272,6 +285,55 @@ async function refreshLibrary() {
     ElMessage.error(String(e));
   } finally {
     libraryLoading.value = false;
+  }
+}
+
+/* ---------- 版本更新 ---------- */
+
+const updateDialogVisible = ref(false);
+const updateName = ref("");
+const updateCheck = ref<UpdateCheck | null>(null);
+const updateChecking = ref(false);
+const updateApplying = ref(false);
+const updateSyncAgents = ref(true);
+const updateDelete = ref(false);
+const updateApplyReport = ref<UpdateApplyReport | null>(null);
+
+async function openUpdate(item: LibraryItem) {
+  updateName.value = item.name;
+  updateCheck.value = null;
+  updateApplyReport.value = null;
+  updateSyncAgents.value = true;
+  updateDelete.value = false;
+  updateDialogVisible.value = true;
+  await runCheck();
+}
+
+async function runCheck() {
+  updateChecking.value = true;
+  try {
+    updateCheck.value = await checkLibraryUpdate(updateName.value);
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    updateChecking.value = false;
+  }
+}
+
+async function runApply() {
+  if (updateCheck.value?.upstreamRemoved.length && !updateDelete.value) {
+    ElMessage.warning("上游删除了文件，请先确认是否跟随删除");
+    return;
+  }
+  updateApplying.value = true;
+  try {
+    updateApplyReport.value = await applyLibraryUpdate(updateName.value, updateSyncAgents.value, updateDelete.value);
+    ElMessage.success("更新完成");
+    await refreshLibrary();
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    updateApplying.value = false;
   }
 }
 
@@ -387,9 +449,16 @@ onMounted(() => {
             <template #default="{ row }">{{ row.description ?? "—" }}</template>
           </el-table-column>
           <el-table-column prop="fileCount" label="文件数" width="90" />
-          <el-table-column label="操作" width="130" fixed="right">
+          <el-table-column label="操作" width="240" fixed="right">
             <template #default="{ row }">
               <el-button size="small" type="primary" plain :icon="Download" @click="openInstall('library', row.name, row.name)">安装到…</el-button>
+              <el-button
+                size="small"
+                :icon="Refresh"
+                :disabled="!isCheckable(row.sourceAgent ?? '')"
+                :title="isCheckable(row.sourceAgent ?? '') ? '' : '该条目没有可检查的上游来源'"
+                @click="openUpdate(row)"
+              >检查更新</el-button>
             </template>
           </el-table-column>
           <template #empty>中央库还是空的——去市场安装，或在 Skill 中心收编现有 skill</template>
@@ -532,6 +601,56 @@ onMounted(() => {
         <el-button type="primary" :loading="installing" @click="confirmInstall">执行安装</el-button>
       </template>
     </el-dialog>
+
+    <!-- 版本更新对话框 -->
+    <el-dialog v-model="updateDialogVisible" :title="`检查更新：${updateName}`" width="480px">
+      <div v-loading="updateChecking">
+        <template v-if="updateCheck">
+          <el-alert
+            v-if="!updateCheck.checkable"
+            :title="`无法检查：${updateCheck.error}`"
+            type="warning"
+            :closable="false"
+            class="mb"
+          />
+          <el-alert
+            v-else-if="updateCheck.identical"
+            title="已是最新版本"
+            type="success"
+            :closable="false"
+            class="mb"
+          />
+          <template v-else>
+            <el-alert title="发现更新" type="warning" :closable="false" class="mb" />
+            <div v-if="updateCheck.changed.length" class="plan-files">变更：{{ updateCheck.changed.join('、') }}</div>
+            <div v-if="updateCheck.incoming.length" class="plan-files">新增：{{ updateCheck.incoming.join('、') }}</div>
+            <div v-if="updateCheck.upstreamRemoved.length" class="plan-files del">
+              上游已删除：{{ updateCheck.upstreamRemoved.join('、') }}
+              <el-checkbox v-model="updateDelete" class="del-check">确认跟随删除</el-checkbox>
+            </div>
+            <el-checkbox v-model="updateSyncAgents" class="mt">同时同步到已部署该 skill 的 Agent</el-checkbox>
+          </template>
+          <template v-if="updateApplyReport">
+            <el-divider />
+            <p class="mb">中央库已更新（{{ updateApplyReport.fileCount }} 个文件）</p>
+            <div v-for="s in updateApplyReport.synced" :key="s.targetAgent" class="deploy-line">
+              <el-tag size="small" type="success">{{ s.targetAgent }}</el-tag>
+              <span class="hint">更新 {{ s.copied }} 个，删除 {{ s.deleted }} 个</span>
+            </div>
+          </template>
+        </template>
+      </div>
+      <template #footer>
+        <el-button @click="updateDialogVisible = false">关闭</el-button>
+        <el-button :loading="updateChecking" @click="runCheck">重新检查</el-button>
+        <el-button
+          v-if="updateCheck?.hasUpdates"
+          type="primary"
+          :loading="updateApplying"
+          @click="runApply"
+        >执行更新</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -553,6 +672,12 @@ onMounted(() => {
   padding: 12px; max-height: 40vh; overflow: auto; margin-bottom: 14px;
 }
 .w-full { width: 100%; }
+.plan-files { font-size: 12px; color: var(--el-text-color-secondary); font-family: Consolas, monospace; word-break: break-all; }
+.plan-files.del { color: var(--el-color-danger); }
+.del-check { margin-left: 10px; }
+.mt { margin-top: 12px; }
+.deploy-line { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.hint { font-size: 12px; color: var(--el-text-color-secondary); }
 .lib-toolbar { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
 .section-sub { font-weight: 600; }
 .hint { font-size: 12px; color: var(--el-text-color-secondary); }

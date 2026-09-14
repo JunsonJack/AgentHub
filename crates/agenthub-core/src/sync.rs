@@ -52,12 +52,16 @@ fn file_bytes(root: &Path, rel: &str) -> Option<Vec<u8>> {
     std::fs::read(root.join(rel)).ok()
 }
 
-/// 目录级文件差异（内容逐字节比较；skill 目录都是小文件，无需哈希优化）
+/// 目录级文件差异（内容逐字节比较；skill 目录都是小文件，无需哈希优化）。
+/// 跳过 .git 与 manifest.json（VCS 内部文件 / AgentHub 元数据，都不属于 skill 内容）。
 pub fn diff_dirs(source: &Path, target: &Path) -> Result<DirDiff> {
     let mut src = vec![];
     let mut tgt = vec![];
     collect_rel(source, &mut src)?;
     collect_rel(target, &mut tgt)?;
+    let is_meta = |f: &String| f == ".git" || f.starts_with(".git/") || f == "manifest.json";
+    let src: Vec<String> = src.into_iter().filter(|f| !is_meta(f)).collect();
+    let tgt: Vec<String> = tgt.into_iter().filter(|f| !is_meta(f)).collect();
     let mut diff = DirDiff {
         only_in_source: vec![],
         only_in_target: vec![],
@@ -129,7 +133,7 @@ fn target_skill_root(reg: &crate::registry::Registry, agent_id: &str) -> Result<
 
 /// 生成同步计划（dry-run，只读）
 pub fn plan_skill_sync(
-    reg: &crate::registry::Registry,
+    reg: &Registry,
     source_agent: &str,
     skill_name: &str,
     scope: &str,
@@ -142,29 +146,36 @@ pub fn plan_skill_sync(
     let target_root = target_skill_root(reg, target_agent)?;
     let target_dir = target_root.join(skill_name);
 
-    if !target_dir.is_dir() {
-        let mut files = vec![];
-        collect_rel(&src_dir, &mut files)?;
-        return Ok(PropagatePlan {
-            target_agent: target_agent.into(),
-            target_dir: target_dir.display().to_string(),
-            copy: files,
-            deletions: vec![],
-            target_absent: true,
-            identical: false,
-        });
-    }
-    let diff = diff_dirs(&src_dir, &target_dir)?;
-    let identical =
-        diff.changed.is_empty() && diff.only_in_source.is_empty() && diff.only_in_target.is_empty();
+    let (copy, deletions, identical, target_absent) = plan_dir_sync(&src_dir, &target_dir)?;
     Ok(PropagatePlan {
         target_agent: target_agent.into(),
         target_dir: target_dir.display().to_string(),
-        copy: [diff.only_in_source, diff.changed].concat(),
-        deletions: diff.only_in_target,
-        target_absent: false,
+        copy,
+        deletions,
+        target_absent,
         identical,
     })
+}
+
+/// 目录对同步原语：比较任意两个目录，返回 (复制清单, 删除清单, 是否一致, 目标缺失)
+pub fn plan_dir_sync(source_dir: &Path, target_dir: &Path) -> Result<(Vec<String>, Vec<String>, bool, bool)> {
+    if !source_dir.is_dir() {
+        return Err(CoreError::NotFound(source_dir.display().to_string()));
+    }
+    if !target_dir.is_dir() {
+        let mut files = vec![];
+        collect_rel(source_dir, &mut files)?;
+        return Ok((files, vec![], false, true));
+    }
+    let diff = diff_dirs(source_dir, target_dir)?;
+    let identical =
+        diff.changed.is_empty() && diff.only_in_source.is_empty() && diff.only_in_target.is_empty();
+    Ok((
+        [diff.only_in_source, diff.changed].concat(),
+        diff.only_in_target,
+        identical,
+        false,
+    ))
 }
 
 /// 目标目录整体快照（同步前的安全网）
@@ -182,7 +193,7 @@ fn snapshot_target_dir(target_dir: &Path, skill_name: &str) -> Result<String> {
 
 /// 执行同步：按 plan 复制；deletions 仅在 delete_confirmed=true 时删除
 pub fn apply_skill_sync(
-    reg: &crate::registry::Registry,
+    reg: &Registry,
     source_agent: &str,
     skill_name: &str,
     scope: &str,
@@ -193,32 +204,47 @@ pub fn apply_skill_sync(
         .ok_or_else(|| CoreError::NotFound(format!("{skill_name} @ {source_agent}/{scope}")))?;
     let src_dir = PathBuf::from(&source.dir);
     let target_dir = PathBuf::from(&plan.target_dir);
+    apply_dir_sync(&src_dir, &target_dir, &plan.copy, &plan.deletions, plan.target_absent, delete_confirmed)
+}
+
+/// 目录对同步原语：把 copy 列表从源复制到目标；deletions 按确认删除；返回报告
+pub fn apply_dir_sync(
+    source_dir: &Path,
+    target_dir: &Path,
+    copy: &[String],
+    deletions: &[String],
+    target_absent: bool,
+    delete_confirmed: bool,
+) -> Result<SyncReport> {
+    let skill_name = target_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "skill".into());
 
     let mut report = SyncReport {
-        target_agent: plan.target_agent.clone(),
+        target_agent: String::new(),
         copied: 0,
         deleted: 0,
         held_back_deletions: vec![],
         backup_dir: None,
     };
 
-    if plan.copy.is_empty() && (plan.deletions.is_empty() || !delete_confirmed) {
-        // 无需变动也要给目标父目录建好（target_absent 时）
-        if plan.target_absent {
-            std::fs::create_dir_all(&target_dir)?;
+    if copy.is_empty() && (deletions.is_empty() || !delete_confirmed) {
+        if target_absent {
+            std::fs::create_dir_all(target_dir)?;
         }
-        report.held_back_deletions = plan.deletions.clone();
+        report.held_back_deletions = deletions.to_vec();
         return Ok(report);
     }
 
     if target_dir.is_dir() {
-        report.backup_dir = Some(snapshot_target_dir(&target_dir, skill_name)?);
+        report.backup_dir = Some(snapshot_target_dir(target_dir, &skill_name)?);
     } else {
-        std::fs::create_dir_all(&target_dir)?;
+        std::fs::create_dir_all(target_dir)?;
     }
 
-    for rel in &plan.copy {
-        let src = src_dir.join(rel);
+    for rel in copy {
+        let src = source_dir.join(rel);
         let dest = target_dir.join(rel);
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent)?;
@@ -228,7 +254,7 @@ pub fn apply_skill_sync(
     }
 
     if delete_confirmed {
-        for rel in &plan.deletions {
+        for rel in deletions {
             let p = target_dir.join(rel);
             if p.is_file() {
                 std::fs::remove_file(&p)?;
@@ -236,7 +262,7 @@ pub fn apply_skill_sync(
             }
         }
     } else {
-        report.held_back_deletions = plan.deletions.clone();
+        report.held_back_deletions = deletions.to_vec();
     }
     Ok(report)
 }

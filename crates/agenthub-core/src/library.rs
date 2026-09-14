@@ -17,6 +17,13 @@ struct Manifest {
     item: LibraryItem,
 }
 
+/// collect_files 供外部统计文件数（manifest 重写用）
+pub(crate) fn count_files(dir: &Path) -> Result<usize> {
+    let mut out = vec![];
+    collect_files(dir, dir, &mut out)?;
+    Ok(out.len())
+}
+
 pub fn library_dir() -> PathBuf {
     skills_root(&app_data_dir())
 }
@@ -62,6 +69,7 @@ pub fn adopt_into(
             description,
             adopted_at: now_millis(),
             file_count: files.len(),
+            updated_at: None,
         };
         let manifest = serde_json::to_string_pretty(&Manifest { item })?;
         std::fs::write(target.join("manifest.json"), manifest)?;
@@ -111,6 +119,32 @@ pub fn read_skill_md_in(data_root: &Path, name: &str) -> Result<String> {
         return Ok(String::new());
     }
     Ok(std::fs::read_to_string(path)?)
+}
+
+/// 读取条目 manifest（更新器需要 source 字段）
+pub(crate) fn read_manifest(data_root: &Path, name: &str) -> Result<LibraryItem> {
+    let manifest = skills_root(data_root).join(name).join("manifest.json");
+    let text = std::fs::read_to_string(&manifest)
+        .map_err(|_| CoreError::NotFound(manifest.display().to_string()))?;
+    serde_json::from_str::<Manifest>(&text)
+        .map(|m| m.item)
+        .map_err(Into::into)
+}
+
+/// 更新后重写 manifest：刷新文件数与更新时间，其余字段保持
+pub(crate) fn rewrite_manifest_after_update(data_root: &Path, name: &str) -> Result<()> {
+    let mut item = read_manifest(data_root, name)?;
+    let dir = skills_root(data_root).join(name);
+    item.file_count = count_files(&dir)?;
+    item.updated_at = Some(now_millis());
+    write_manifest_item(data_root, name, &item)
+}
+
+/// 直接写入 manifest（更新流程在删除旧内容前先把 item 读出来，拷完再写回）
+pub(crate) fn write_manifest_item(data_root: &Path, name: &str, item: &LibraryItem) -> Result<()> {
+    let manifest = serde_json::to_string_pretty(&Manifest { item: item.clone() })?;
+    std::fs::write(skills_root(data_root).join(name).join("manifest.json"), manifest)?;
+    Ok(())
 }
 
 fn now_millis() -> u64 {

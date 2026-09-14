@@ -220,6 +220,31 @@ pub fn fetch_url_metadata(url: String) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({ "title": title, "description": description }))
 }
 
+/* ---------- Skill 版本与更新 ---------- */
+
+#[tauri::command]
+pub fn check_library_update(name: String) -> Result<agenthub_core::updater::UpdateCheck, String> {
+    agenthub_core::updater::check_update(&agenthub_core::util::app_data_dir(), &name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn apply_library_update(
+    reg: State<Registry>,
+    name: String,
+    sync_agents: bool,
+    delete_confirmed: bool,
+) -> Result<agenthub_core::updater::UpdateApplyReport, String> {
+    agenthub_core::updater::apply_update(
+        &agenthub_core::util::app_data_dir(),
+        &name,
+        &reg,
+        sync_agents,
+        delete_confirmed,
+    )
+    .map_err(|e| e.to_string())
+}
+
 /* ---------- 收藏集 ---------- */
 
 #[tauri::command]

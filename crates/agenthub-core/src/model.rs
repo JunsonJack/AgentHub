@@ -108,6 +108,9 @@ pub struct LibraryItem {
     pub description: Option<String>,
     pub adopted_at: u64,
     pub file_count: usize,
+    /// 最近一次从上游更新的时间（收编条目为空）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

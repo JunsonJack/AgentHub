@@ -193,3 +193,23 @@ export interface SyncReport {
   heldBackDeletions: string[];
   backupDir: string | null;
 }
+
+export interface UpdateCheck {
+  name: string;
+  source: string;
+  checkable: boolean;
+  hasUpdates: boolean;
+  identical: boolean;
+  incoming: string[];
+  changed: string[];
+  upstreamRemoved: string[];
+  error: string | null;
+}
+
+export interface UpdateApplyReport {
+  name: string;
+  updatedLibrary: boolean;
+  fileCount: number;
+  synced: SyncReport[];
+  error: string | null;
+}

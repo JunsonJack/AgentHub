@@ -22,6 +22,8 @@ import type {
   SnapshotMeta,
   SyncReport,
   TrashItem,
+  UpdateApplyReport,
+  UpdateCheck,
   WriteReport,
 } from "./types";
 
@@ -279,4 +281,18 @@ export function propagateMcp(
   targetAgents: string[]
 ): Promise<DeployResult[]> {
   return invoke<DeployResult[]>("propagate_mcp", { sourceAgent, name, targetAgents });
+}
+
+/* ---------- 版本与更新 ---------- */
+
+export function checkLibraryUpdate(name: string): Promise<UpdateCheck> {
+  return invoke<UpdateCheck>("check_library_update", { name });
+}
+
+export function applyLibraryUpdate(
+  name: string,
+  syncAgents: boolean,
+  deleteConfirmed: boolean
+): Promise<UpdateApplyReport> {
+  return invoke<UpdateApplyReport>("apply_library_update", { name, syncAgents, deleteConfirmed });
 }

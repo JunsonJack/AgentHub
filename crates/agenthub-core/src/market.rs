@@ -272,31 +272,16 @@ pub fn preview_skills_sh(id: &str) -> Result<MarketPreview> {
 }
 
 /// 安装 skills.sh 条目：下载快照 → 暂存临时目录 → 复用 adopt 入库（含冲突拒绝）
+/// 来源记为 `skills.sh:<id>`，供更新器识别上游
 pub fn install_skills_sh(id: &str, data_root: &Path, dry_run: bool) -> Result<AdoptReport> {
-    let dl: SsDownload = http_get_json(&download_url(id)?, None)?;
-    if dl.files.is_empty() {
-        return Err(CoreError::Other("市场返回的快照为空".into()));
-    }
-    let name = id.rsplit('/').next().unwrap_or(id).to_string();
-    // 暂存：<tmp>/<随机目录>/<name> —— 内层以 skill 名命名，入库目录名才是规范名
-    let stage_root = staging_dir()?;
-    let stage = stage_root.join(&name);
-    std::fs::create_dir_all(&stage)?;
-    let result = (|| {
-        for f in &dl.files {
-            let rel = Path::new(&f.path);
-            if rel.is_absolute() || f.path.contains("..") {
-                return Err(CoreError::Other(format!("快照含非法路径: {}", f.path)));
-            }
-            let dest = stage.join(rel);
-            if let Some(parent) = dest.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::write(dest, &f.contents)?;
-        }
-        library::adopt_into(data_root, &stage, "skills.sh", dry_run)
-    })();
-    let _ = std::fs::remove_dir_all(&stage_root);
+    let fetched = fetch_skills_sh_to_temp(id)?;
+    let result = library::adopt_into(
+        data_root,
+        &fetched.content_dir,
+        &format!("skills.sh:{id}"),
+        dry_run,
+    );
+    let _ = std::fs::remove_dir_all(&fetched.cleanup_root);
     result
 }
 
@@ -447,6 +432,27 @@ pub fn parse_git_url(input: &str) -> Result<GitSpec> {
 /// 从 Git URL 安装：浅克隆（必要时 sparse-checkout 子目录）→ 定位 skill 目录 → 入库。
 /// dry-run 也会克隆（否则无从得知文件清单），但不会写入中央库。
 pub fn install_git(url: &str, data_root: &Path, dry_run: bool) -> Result<AdoptReport> {
+    let fetched = fetch_git_to_temp(url)?;
+    let result = library::adopt_into(
+        data_root,
+        &fetched.content_dir,
+        &format!("git:{}", parse_git_url(url)?.repo_url),
+        dry_run,
+    );
+    let _ = std::fs::remove_dir_all(&fetched.cleanup_root);
+    result
+}
+
+pub struct FetchedUpstream {
+    /// 删除整个临时范围
+    pub cleanup_root: PathBuf,
+    pub skill_name: String,
+    /// 以 skill 名命名的内容目录
+    pub content_dir: PathBuf,
+}
+
+/// 拉取 Git 仓库（含子目录解析）到临时目录。调用方负责清理 cleanup_root。
+pub fn fetch_git_to_temp(url: &str) -> Result<FetchedUpstream> {
     let spec = parse_git_url(url)?;
     let tmp = std::env::temp_dir().join(format!(
         "agenthub-clone-{}",
@@ -456,34 +462,102 @@ pub fn install_git(url: &str, data_root: &Path, dry_run: bool) -> Result<AdoptRe
             .unwrap_or(0)
     ));
     let _ = std::fs::remove_dir_all(&tmp);
-    let result = (|| {
-        let mut cmd = Command::new("git");
-        cmd.arg("clone")
-            .arg("--quiet")
-            .arg("--depth")
-            .arg("1")
-            .arg("--filter=blob:none");
-        if let Some(b) = &spec.branch {
-            cmd.arg("--branch").arg(b);
-        }
-        if spec.subpath.is_some() {
-            cmd.arg("--sparse");
-        }
-        cmd.arg(&spec.repo_url).arg(&tmp);
-        run_git(&mut cmd)?;
+    // 克隆到 tmp/src 子目录：仓库根安装时才能把 src 重命名为规范 skill 名
+    let src = tmp.join("src");
+    let mut cmd = Command::new("git");
+    // 强制关闭 autocrlf：两次拉取的字节必须一致，否则更新检查会误报差异
+    cmd.arg("-c").arg("core.autocrlf=false");
+    cmd.arg("clone")
+        .arg("--quiet")
+        .arg("--depth")
+        .arg("1")
+        .arg("--filter=blob:none");
+    if let Some(b) = &spec.branch {
+        cmd.arg("--branch").arg(b);
+    }
+    if spec.subpath.is_some() {
+        cmd.arg("--sparse");
+    }
+    cmd.arg(&spec.repo_url).arg(&src);
+    run_git(&mut cmd)?;
 
-        if let Some(sp) = &spec.subpath {
-            run_git(
-                Command::new("git")
-                    .current_dir(&tmp)
-                    .args(["sparse-checkout", "set", sp]),
-            )?;
+    if let Some(sp) = &spec.subpath {
+        run_git(
+            Command::new("git")
+                .current_dir(&tmp)
+                .args(["sparse-checkout", "set", sp]),
+        )?;
+    }
+    let skill_dir = locate_skill_dir(&src, spec.subpath.as_deref())?;
+    let (skill_name, content_dir) = if skill_dir == src {
+        // 仓库根即 skill：以仓库名命名（GitHub 场景即 repo 名）
+        let name = repo_name(&spec.repo_url);
+        let renamed = tmp.join(&name);
+        std::fs::rename(&src, &renamed)?;
+        (name, renamed)
+    } else {
+        let name = skill_dir
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "skill".into());
+        (name, skill_dir)
+    };
+    // 剥离 .git：中央库不需要历史（更新走重新拉取），且 .git 内部文件会让 diff 误报
+    let git_dir = content_dir.join(".git");
+    if git_dir.exists() {
+        let _ = std::fs::remove_dir_all(&git_dir);
+    }
+    Ok(FetchedUpstream {
+        cleanup_root: tmp,
+        skill_name,
+        content_dir,
+    })
+}
+
+/// 从仓库 URL 取规范 skill 名（去 .git 后缀，替换文件系统不安全字符）
+fn repo_name(url: &str) -> String {
+    let normalized = url.trim_end_matches('/').replace('\\', "/");
+    let name = normalized.rsplit('/').next().unwrap_or("skill");
+    let name = name.strip_suffix(".git").unwrap_or(name);
+    name.chars()
+        .map(|c| {
+            if matches!(c, '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') {
+                '-'
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+/// 拉取 skills.sh 快照到临时目录。调用方负责清理 cleanup_root。
+pub fn fetch_skills_sh_to_temp(id: &str) -> Result<FetchedUpstream> {
+    let dl: SsDownload = http_get_json(&download_url(id)?, None)?;
+    if dl.files.is_empty() {
+        return Err(CoreError::Other("市场返回的快照为空".into()));
+    }
+    let name = id.rsplit('/').next().unwrap_or(id).to_string();
+    // 暂存：<tmp>/<随机目录>/<name> —— 内层以 skill 名命名，入库目录名才是规范名
+    let stage_root = staging_dir()?;
+    let stage = stage_root.join(&name);
+    std::fs::create_dir_all(&stage)?;
+    for f in &dl.files {
+        let rel = Path::new(&f.path);
+        if rel.is_absolute() || f.path.contains("..") {
+            let _ = std::fs::remove_dir_all(&stage_root);
+            return Err(CoreError::Other(format!("快照含非法路径: {}", f.path)));
         }
-        let skill_dir = locate_skill_dir(&tmp, spec.subpath.as_deref())?;
-        library::adopt_into(data_root, &skill_dir, &format!("git:{}", spec.repo_url), dry_run)
-    })();
-    let _ = std::fs::remove_dir_all(&tmp);
-    result
+        let dest = stage.join(rel);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(dest, &f.contents)?;
+    }
+    Ok(FetchedUpstream {
+        cleanup_root: stage_root,
+        skill_name: name,
+        content_dir: stage,
+    })
 }
 
 fn run_git(cmd: &mut Command) -> Result<()> {
