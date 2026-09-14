@@ -604,7 +604,7 @@ onMounted(refresh);
 .agent-select { width: 180px; }
 .mb { margin-bottom: 12px; }
 .server-name { font-weight: 600; }
-.mcp-table { background: #fff; }
+.mcp-table { background: var(--el-bg-color); }
 .cmd {
   font-size: 12px; font-family: Consolas, monospace;
   background: var(--el-fill-color); padding: 2px 6px; border-radius: 4px;

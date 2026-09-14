@@ -42,7 +42,7 @@ const title = computed(() => (route.meta.title as string) ?? "AgentHub");
 html, body, #app { height: 100%; }
 body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
 
-.app-shell { height: 100%; background: #f5f5f7; }
+.app-shell { height: 100%; }
 .app-aside {
   border-right: 1px solid var(--el-border-color-light);
   background: rgba(255, 255, 255, .78);
