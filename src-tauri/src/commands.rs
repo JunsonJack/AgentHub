@@ -358,6 +358,42 @@ pub fn apply_profile(
 }
 
 #[tauri::command]
+pub fn get_custom_agents() -> Result<String, String> {
+    Ok(agenthub_core::store::Store::open_default()
+        .ok()
+        .and_then(|s| s.get_setting(agenthub_core::registry::CUSTOM_AGENTS_KEY).ok().flatten())
+        .unwrap_or_else(|| "[]".into()))
+}
+
+#[tauri::command]
+pub fn set_custom_agents(raw: String) -> Result<(), String> {
+    let agents: Vec<agenthub_core::model::AgentDescriptor> =
+        serde_json::from_str(&raw).map_err(|e| format!("自定义 Agent JSON 无效: {e}"))?;
+    let builtins: std::collections::HashSet<&str> = agenthub_core::registry::descriptors()
+        .iter().map(|a| a.id.as_str()).collect();
+    let mut ids = std::collections::HashSet::new();
+    for agent in &agents {
+        if agent.id.trim().is_empty() || agent.name.trim().is_empty() {
+            return Err("Agent id 和名称不能为空".into());
+        }
+        if !ids.insert(agent.id.as_str()) || builtins.contains(agent.id.as_str()) {
+            return Err(format!("Agent id 重复或与内置 Agent 冲突: {}", agent.id));
+        }
+        if agent.mcp_config_paths.windows.is_empty() && agent.mcp_config_paths.macos.is_empty() && agent.mcp_config_paths.linux.is_empty() {
+            return Err(format!("{} 至少要配置一个 MCP 配置路径", agent.name));
+        }
+        if agent.mcp_format != "json-map" && agent.mcp_format != "dsh-array" {
+            return Err(format!("{} 的 MCP 格式不支持：{}（可选 json-map / dsh-array）", agent.name, agent.mcp_format));
+        }
+    }
+    let normalized = serde_json::to_string_pretty(&agents).map_err(|e| e.to_string())?;
+    agenthub_core::store::Store::open_default()
+        .map_err(|e| e.to_string())?
+        .set_setting(agenthub_core::registry::CUSTOM_AGENTS_KEY, &normalized)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn get_path_overrides() -> Result<String, String> {
     Ok(agenthub_core::store::Store::open_default()
         .ok()

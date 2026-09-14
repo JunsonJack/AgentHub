@@ -131,15 +131,6 @@ pub(crate) fn read_manifest(data_root: &Path, name: &str) -> Result<LibraryItem>
         .map_err(Into::into)
 }
 
-/// 更新后重写 manifest：刷新文件数与更新时间，其余字段保持
-pub(crate) fn rewrite_manifest_after_update(data_root: &Path, name: &str) -> Result<()> {
-    let mut item = read_manifest(data_root, name)?;
-    let dir = skills_root(data_root).join(name);
-    item.file_count = count_files(&dir)?;
-    item.updated_at = Some(now_millis());
-    write_manifest_item(data_root, name, &item)
-}
-
 /// 直接写入 manifest（更新流程在删除旧内容前先把 item 读出来，拷完再写回）
 pub(crate) fn write_manifest_item(data_root: &Path, name: &str, item: &LibraryItem) -> Result<()> {
     let manifest = serde_json::to_string_pretty(&Manifest { item: item.clone() })?;

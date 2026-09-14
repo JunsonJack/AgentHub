@@ -1,24 +1,30 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { DeleteLocation, Key, Refresh, RefreshLeft } from "@element-plus/icons-vue";
+import { useTheme, type ThemeMode } from "../composables/theme";
 import {
+  getCustomAgents,
   getPathOverrides,
   listSnapshots,
   listTrash,
   pruneSnapshots,
   restoreTrash,
   rollbackSnapshot,
+  setCustomAgents,
   setPathOverrides,
   skillsmpClearKey,
   skillsmpKeyStatus,
   skillsmpSetKey,
 } from "../api";
-import type { SnapshotMeta, TrashItem } from "../api/types";
+import type { AgentDescriptor, SnapshotMeta, TrashItem } from "../api/types";
 
 const snapshots = ref<SnapshotMeta[]>([]);
 const loading = ref(false);
 const filter = ref("");
+const snapshotPage = ref(1);
+const snapshotPageSize = 10;
+const { themeMode, setTheme } = useTheme();
 
 const filtered = computed(() =>
   snapshots.value.filter(
@@ -28,6 +34,10 @@ const filtered = computed(() =>
       s.fileName.toLowerCase().includes(filter.value.trim().toLowerCase())
   )
 );
+
+const pagedSnapshots = computed(() => filtered.value.slice((snapshotPage.value - 1) * snapshotPageSize, snapshotPage.value * snapshotPageSize));
+
+watch(filter, () => { snapshotPage.value = 1; });
 
 function fmtTime(ms: number): string {
   if (!ms) return "—";
@@ -111,6 +121,7 @@ onMounted(() => {
   refreshKey();
   refreshTrash();
   refreshOverrides();
+  refreshCustomAgents();
 });
 
 /* ---------- 回收站 ---------- */
@@ -118,8 +129,32 @@ onMounted(() => {
 const trashItems = ref<TrashItem[]>([]);
 const trashLoading = ref(false);
 
-/* ---------- Agent 路径覆写 ---------- */
+const customAgentsRaw = ref("[]");
+const customAgentsSaving = ref(false);
 
+async function refreshCustomAgents() {
+  try {
+    customAgentsRaw.value = await getCustomAgents();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+async function saveCustomAgents() {
+  customAgentsSaving.value = true;
+  try {
+    const agents = JSON.parse(customAgentsRaw.value) as AgentDescriptor[];
+    if (!Array.isArray(agents)) throw new Error("必须是数组");
+    await setCustomAgents(JSON.stringify(agents));
+    ElMessage.success("自定义 Agent 已保存，重启应用后生效");
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    customAgentsSaving.value = false;
+  }
+}
+
+/* ---------- Agent 路径覆写 ---------- */
 const overridesRaw = ref("{}");
 const overridesSaving = ref(false);
 
@@ -196,6 +231,27 @@ async function onPrune() {
     </el-descriptions>
 
     <div class="section-head">
+      <span class="section-title">外观</span>
+    </div>
+    <el-card shadow="never" class="mb appearance-card">
+      <div class="appearance-row">
+        <div>
+          <div class="appearance-title">主题</div>
+          <div class="key-note">跟随系统外观，或固定使用日间 / 夜间模式</div>
+        </div>
+        <el-segmented
+          :model-value="themeMode"
+          :options="[
+            { label: '跟随系统', value: 'system' },
+            { label: '日间', value: 'light' },
+            { label: '夜间', value: 'dark' },
+          ]"
+          @change="(value: any) => setTheme(value as ThemeMode)"
+        />
+      </div>
+    </el-card>
+
+    <div class="section-head">
       <span class="section-title">SkillsMP API 密钥</span>
     </div>
     <el-card shadow="never" class="mb">
@@ -218,6 +274,22 @@ async function onPrune() {
         <template v-else>未设置。匿名可用（每天 50 次搜索）；配置密钥后每天 500 次并启用按技能功能（语义）排序的搜索。</template>
         密钥只保存在本机 SQLite（%APPDATA%\AgentHub），P2 计划迁移到系统钥匙串。
       </div>
+    </el-card>
+
+    <div class="section-head">
+      <span class="section-title">自定义 Agent</span>
+    </div>
+    <el-card shadow="never" class="mb">
+      <p class="key-note mb">
+        不限制 Agent 名单。每个 Agent 的 MCP 格式可选 <code class="cmd">json-map</code> 或 <code class="cmd">dsh-array</code>；保存后重启应用生效。
+      </p>
+      <el-input v-model="customAgentsRaw" type="textarea" :rows="12" spellcheck="false" class="mono" placeholder="[]" />
+      <el-button type="primary" class="mt" :loading="customAgentsSaving" @click="saveCustomAgents">保存自定义 Agent</el-button>
+      <el-button class="mt" @click="customAgentsRaw = JSON.stringify([{
+        id: 'dsh', name: 'DeepSeek Harness', kind: 'cli',
+        mcpConfigPaths: { windows: ['~/.dsh/dsh-mcp.json'], macos: ['~/.dsh/dsh-mcp.json'], linux: ['~/.dsh/dsh-mcp.json'] },
+        skillDirs: { windows: [], macos: [], linux: [] }, mcpFormat: 'dsh-array', reload: 'restart'
+      }], null, 2)">填入 dsh 示例</el-button>
     </el-card>
 
     <div class="section-head">
@@ -249,7 +321,8 @@ async function onPrune() {
       </div>
     </div>
 
-    <el-table :data="filtered" v-loading="loading" stripe>
+    <div class="history-panel">
+      <el-table height="100%" :data="pagedSnapshots" v-loading="loading" stripe>
       <el-table-column label="时间" width="170">
         <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
       </el-table-column>
@@ -272,13 +345,23 @@ async function onPrune() {
         </template>
       </el-table-column>
       <template #empty>还没有任何快照——第一次在 MCP 中心保存配置后就会出现</template>
-    </el-table>
+      </el-table>
+    </div>
+    <el-pagination
+      v-model:current-page="snapshotPage"
+      :page-size="snapshotPageSize"
+      :total="filtered.length"
+      layout="total, prev, pager, next"
+      background
+      class="history-pagination"
+    />
 
     <div class="section-head">
       <span class="section-title">回收站（{{ trashItems.length }}）</span>
       <el-button size="small" :icon="Refresh" :loading="trashLoading" @click="refreshTrash">刷新</el-button>
     </div>
-    <el-table :data="trashItems" v-loading="trashLoading" stripe>
+    <div class="history-panel trash-panel">
+      <el-table height="100%" :data="trashItems" v-loading="trashLoading" stripe>
       <el-table-column label="删除时间" width="170">
         <template #default="{ row }">{{ fmtTime(row.deletedAt) }}</template>
       </el-table-column>
@@ -295,13 +378,23 @@ async function onPrune() {
         </template>
       </el-table-column>
       <template #empty>回收站是空的——在 Skill 中心删除的 skill 会出现在这里，可随时恢复</template>
-    </el-table>
+      </el-table>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.mb { margin-bottom: 20px; }
-.section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.history-panel { height: 430px; overflow: hidden; border: 1px solid var(--el-border-color-lighter); border-radius: 12px; background: var(--el-bg-color); }
+.history-panel :deep(.el-table) { height: 100%; }
+.history-panel :deep(.el-table__body-wrapper) { overflow: hidden; }
+.history-pagination { display: flex; justify-content: flex-end; padding: 12px 0 18px; }
+.trash-panel { height: 300px; }
+
+.appearance-card { max-width: 760px; }
+.appearance-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.appearance-title { font-weight: 600; margin-bottom: 4px; }
+
+
 .section-title { font-weight: 600; }
 .filter { width: 240px; margin-right: 8px; }
 .cmd {

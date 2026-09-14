@@ -50,6 +50,40 @@
       "reload": "restart"
     },
     {
+      "id": "pi",
+      "name": "Pi",
+      "kind": "cli",
+      "mcpConfigPaths": {
+        "windows": ["~/.pi/agent/mcp.json"],
+        "macos": ["~/.pi/agent/mcp.json"],
+        "linux": ["~/.pi/agent/mcp.json"]
+      },
+      "skillDirs": {
+        "windows": ["~/.pi/agent/skills", "~/.agents/skills"],
+        "macos": ["~/.pi/agent/skills", "~/.agents/skills"],
+        "linux": ["~/.pi/agent/skills", "~/.agents/skills"]
+      },
+      "mcpFormat": "json-map",
+      "reload": "restart"
+    },
+    {
+      "id": "dsh",
+      "name": "DeepSeek Harness",
+      "kind": "cli",
+      "mcpConfigPaths": {
+        "windows": ["~/.dsh/dsh-mcp.json"],
+        "macos": ["~/.dsh/dsh-mcp.json"],
+        "linux": ["~/.dsh/dsh-mcp.json"]
+      },
+      "skillDirs": {
+        "windows": [],
+        "macos": [],
+        "linux": []
+      },
+      "mcpFormat": "dsh-array",
+      "reload": "restart"
+    },
+    {
       "id": "cursor",
       "name": "Cursor",
       "kind": "ide",

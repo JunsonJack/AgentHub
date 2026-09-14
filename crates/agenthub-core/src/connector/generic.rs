@@ -115,13 +115,20 @@ impl Connector for DetectOnlyConnector {
 
 /// 供注册表构造使用：按描述符生成对应连接器
 pub fn make_connector(desc: &AgentDescriptor, base: PathBuf) -> Box<dyn Connector> {
+    // 自定义 Agent 也能通过 mcpFormat 选择适配器；不要把格式路由绑定在 id 上。
+    if desc.mcp_format == "dsh-array" {
+        return Box::new(super::dsh::DshConnector::with_descriptor(desc.clone(), base));
+    }
     match desc.id.as_str() {
         "claude-code" => Box::new(ClaudeCodeConnector::with_descriptor(desc.clone(), base)),
         "zcode" => Box::new(ZcodeConnector::with_descriptor(desc.clone(), base)),
         "codex" => Box::new(CodexConnector::with_descriptor(desc.clone(), base)),
         "cursor" => Box::new(CursorConnector::with_descriptor(desc.clone(), base)),
-        "gemini-cli" | "claude-desktop" => Box::new(GenericJsonMcpConnector::with_descriptor(desc.clone(), base)),
-        _ => Box::new(DetectOnlyConnector::with_descriptor(desc.clone(), base)),
+        "dsh" => Box::new(super::dsh::DshConnector::with_descriptor(desc.clone(), base)),
+        "gemini-cli" | "claude-desktop" | "pi" => {
+            Box::new(GenericJsonMcpConnector::with_descriptor(desc.clone(), base))
+        }
+        _ => Box::new(GenericJsonMcpConnector::with_descriptor(desc.clone(), base)),
     }
 }
 

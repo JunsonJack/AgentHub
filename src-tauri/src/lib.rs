@@ -6,6 +6,9 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 外链 / 本地路径交由系统默认应用处理：webview 只有一个窗口且无后退键，
+        // 任何在应用内跳转的外链都会把用户锁死在别人页面上。
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let registry = Registry::load()
                 .map_err(|e| format!("装载 Agent 注册表失败: {e}"))?;
@@ -23,6 +26,8 @@ pub fn run() {
             commands::enable_mcp,
             commands::test_mcp,
             commands::test_mcp_def,
+            commands::get_custom_agents,
+            commands::set_custom_agents,
             commands::list_collection,
             commands::list_curated,
             commands::add_collection_item,

@@ -194,6 +194,14 @@ export function skillsmpClearKey(): Promise<void> {
   return invoke<void>("skillsmp_clear_key");
 }
 
+export function getCustomAgents(): Promise<string> {
+  return invoke<string>("get_custom_agents");
+}
+
+export function setCustomAgents(raw: string): Promise<void> {
+  return invoke<void>("set_custom_agents", { raw });
+}
+
 export function getPathOverrides(): Promise<string> {
   return invoke<string>("get_path_overrides");
 }

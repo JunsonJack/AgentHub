@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Collection, Delete, FolderAdd, Refresh, Search, SwitchButton, View } from "@element-plus/icons-vue";
+import { Collection, Delete, FolderAdd, MoreFilled, Refresh, Search, SwitchButton, View } from "@element-plus/icons-vue";
 import {
   adoptSkill,
   applySkillSync,
@@ -23,6 +23,9 @@ const loading = ref(false);
 const keyword = ref("");
 const agentFilter = ref("");
 const scopeFilter = ref("");
+const skillPage = ref(1);
+const libraryPage = ref(1);
+const pageSize = 10;
 
 const agentOptions = computed(() => [...new Set(skills.value.map((s) => s.agentId))]);
 
@@ -43,6 +46,20 @@ const filteredSkills = computed(() =>
 
 const scopeTag = (scope: string) => (scope === "user" ? "success" : "warning");
 const scopeText = (scope: string) => (scope === "user" ? "用户级" : "项目级");
+
+const pagedSkills = computed(() => {
+  const start = (skillPage.value - 1) * pageSize;
+  return filteredSkills.value.slice(start, start + pageSize);
+});
+
+const pagedLibrary = computed(() => {
+  const start = (libraryPage.value - 1) * pageSize;
+  return library.value.slice(start, start + pageSize);
+});
+
+watch([keyword, agentFilter, scopeFilter], () => { skillPage.value = 1; });
+watch(activeTab, () => { libraryPage.value = 1; });
+
 
 async function refresh() {
   loading.value = true;
@@ -149,7 +166,12 @@ async function onDelete(s: SkillEntry) {
   }
 }
 
-/* ---------- 文件夹导入 ---------- */
+async function handleSkillAction(command: { action: "adopt" | "sync" | "delete"; row: SkillEntry }) {
+  if (command.action === "adopt") await startAdopt(command.row);
+  if (command.action === "sync") await openSync(command.row);
+  if (command.action === "delete") await onDelete(command.row);
+}
+
 
 const importDialogVisible = ref(false);
 const importPath = ref("");
@@ -267,9 +289,9 @@ onMounted(refresh);
 </script>
 
 <template>
-  <div>
-    <el-tabs v-model="activeTab">
-      <el-tab-pane label="各 Agent 的 Skill" name="agents">
+  <div class="management-page">
+    <el-tabs v-model="activeTab" class="management-tabs">
+      <el-tab-pane label="各 Agent 的 Skill" name="agents" class="management-pane">
         <div class="toolbar">
           <el-input v-model="keyword" :prefix-icon="Search" placeholder="搜索名称 / 描述" clearable class="kw" />
           <el-select v-model="agentFilter" placeholder="全部 Agent" clearable class="sel">
@@ -283,7 +305,8 @@ onMounted(refresh);
           <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
         </div>
 
-        <el-table :data="filteredSkills" v-loading="loading" stripe>
+        <div class="table-region">
+          <el-table height="100%" :data="pagedSkills" v-loading="loading" stripe>
           <el-table-column label="Skill" min-width="160">
             <template #default="{ row }">
               <span class="skill-name">{{ row.name }}</span>
@@ -296,44 +319,94 @@ onMounted(refresh);
               <el-tag size="small" :type="scopeTag(row.scope)" effect="plain">{{ scopeText(row.scope) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="描述" min-width="260">
-            <template #default="{ row }">{{ row.description ?? "—" }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="290" fixed="right">
+          <el-table-column label="描述" min-width="260" show-overflow-tooltip>
             <template #default="{ row }">
-              <el-button size="small" :icon="View" @click="openAgentSkillDetail(row)">详情</el-button>
-              <el-button size="small" type="primary" plain :icon="Collection" @click="startAdopt(row)">收编</el-button>
-              <el-button size="small" :icon="SwitchButton" @click="openSync(row)">同步…</el-button>
-              <el-button size="small" type="danger" plain :icon="Delete" @click="onDelete(row)" />
+              <span v-if="row.description" class="desc-text">{{ row.description }}</span>
+              <span v-else class="desc-empty">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="112" fixed="right" class-name="action-column">
+            <template #default="{ row }">
+              <div class="row-actions">
+                <el-tooltip content="查看详情" placement="top">
+                  <el-button text circle class="action-button action-button-primary" @click="openAgentSkillDetail(row)">
+                    <el-icon><View /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-dropdown trigger="click" @command="handleSkillAction">
+                  <el-button text circle class="action-button" aria-label="更多操作">
+                    <el-icon><MoreFilled /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item :command="{ action: 'adopt', row }">
+                        <el-icon><Collection /></el-icon>收编到中央库
+                      </el-dropdown-item>
+                      <el-dropdown-item :command="{ action: 'sync', row }">
+                        <el-icon><SwitchButton /></el-icon>同步到其他 Agent
+                      </el-dropdown-item>
+                      <el-dropdown-item :command="{ action: 'delete', row }" divided class="danger-menu-item">
+                        <el-icon><Delete /></el-icon>移入回收站
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
             </template>
           </el-table-column>
           <template #empty>没有匹配的 skill</template>
-        </el-table>
+          </el-table>
+        </div>
+        <el-pagination
+          v-model:current-page="skillPage"
+          :page-size="pageSize"
+          :total="filteredSkills.length"
+          layout="total, prev, pager, next"
+          background
+          class="table-pagination"
+        />
       </el-tab-pane>
 
-      <el-tab-pane :label="`中央库（${library.length}）`" name="library">
+      <el-tab-pane :label="`中央库（${library.length}）`" name="library" class="management-pane">
         <el-alert
           title="中央库是收编后的单一事实来源；P1 将在此基础上支持「一键安装到任意 Agent」"
           type="info"
           :closable="false"
           class="mb"
         />
-        <el-table :data="library" v-loading="loading" stripe>
+        <div class="table-region">
+          <el-table height="100%" :data="pagedLibrary" v-loading="loading" stripe>
           <el-table-column prop="name" label="Skill" min-width="160" />
           <el-table-column label="来源 Agent" width="130">
             <template #default="{ row }">{{ row.sourceAgent ?? "—" }}</template>
           </el-table-column>
-          <el-table-column label="描述" min-width="240">
-            <template #default="{ row }">{{ row.description ?? "—" }}</template>
+          <el-table-column label="描述" min-width="240" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span v-if="row.description" class="desc-text">{{ row.description }}</span>
+              <span v-else class="desc-empty">—</span>
+            </template>
           </el-table-column>
           <el-table-column prop="fileCount" label="文件数" width="90" />
-          <el-table-column label="操作" width="100" fixed="right">
+          <el-table-column label="操作" width="72" fixed="right" class-name="action-column">
             <template #default="{ row }">
-              <el-button size="small" :icon="View" @click="openLibraryDetail(row)">详情</el-button>
+              <el-tooltip content="查看详情" placement="top">
+                <el-button text circle class="action-button action-button-primary" @click="openLibraryDetail(row)">
+                  <el-icon><View /></el-icon>
+                </el-button>
+              </el-tooltip>
             </template>
           </el-table-column>
           <template #empty>还没有收编任何 skill——去「各 Agent 的 Skill」里点「收编」</template>
-        </el-table>
+          </el-table>
+        </div>
+        <el-pagination
+          v-model:current-page="libraryPage"
+          :page-size="pageSize"
+          :total="library.length"
+          layout="total, prev, pager, next"
+          background
+          class="table-pagination"
+        />
       </el-tab-pane>
     </el-tabs>
 
@@ -439,12 +512,65 @@ onMounted(refresh);
 </template>
 
 <style scoped>
-.toolbar { display: flex; gap: 10px; margin-bottom: 14px; }
+.action-column :deep(.cell) { padding: 0 12px; }
+.row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.action-button {
+  width: 30px; height: 30px; padding: 0; border-radius: 9px;
+  color: var(--el-text-color-secondary); transition: all 0.2s ease;
+}
+.action-button:hover {
+  color: var(--el-text-color-primary); background: var(--el-fill-color-light);
+  transform: translateY(-1px);
+}
+.action-button-primary { color: var(--el-color-primary); }
+.action-button-primary:hover { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+:deep(.el-dropdown-menu__item) { display: flex; align-items: center; gap: 8px; min-width: 164px; }
+:deep(.danger-menu-item) { color: var(--el-color-danger); }
+
+
+.management-page { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.management-tabs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.management-tabs :deep(.el-tabs__header) { flex: 0 0 auto; }
+.management-tabs :deep(.el-tabs__content) { flex: 1; min-height: 0; overflow: hidden; }
+.management-tabs :deep(.el-tab-pane) { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.toolbar { flex: 0 0 auto; }
 .kw { width: 260px; }
 .sel { width: 160px; }
+.management-page { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.management-tabs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.management-tabs :deep(.el-tabs__content) { flex: 1; min-height: 0; overflow: hidden; }
+.management-tabs :deep(.el-tab-pane) { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.table-region { flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--el-border-color-lighter); border-radius: 12px; background: var(--el-bg-color); }
+.table-region :deep(.el-table) { height: 100%; }
+.table-region :deep(.el-table__body-wrapper) { overflow: hidden; }
+.table-pagination { flex: 0 0 auto; justify-content: flex-end; padding: 12px 0 2px; }
 .mb { margin-bottom: 12px; }
 .ml { margin-left: 6px; }
 .skill-name { font-weight: 600; }
+.desc-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+.desc-empty { color: var(--el-text-color-placeholder); }
+/* 描述悬浮详情提示：限宽、舒服的行高与内边距，像 macOS 的悬浮卡片 */
+:deep(.el-tooltip__popper) {
+  max-width: 300px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #f5f5f7;
+  background: rgba(28, 28, 30, .92);
+  backdrop-filter: blur(8px);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .22);
+  word-break: break-word;
+  white-space: normal;
+}
 .meta { margin-bottom: 12px; }
 .meta-line {
   font-size: 12px; color: var(--el-text-color-secondary);

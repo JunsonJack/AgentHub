@@ -33,7 +33,7 @@
 
 ## 项目背景
 
-一台重度使用 AI 的电脑上，通常同时装着多个 Agent：Claude Code、ZCode、Codex CLI、Cursor、Gemini CLI……它们各自为政：
+一台重度使用 AI 的电脑上，通常同时装着多个 Agent：Claude Code、ZCode、Codex CLI、Pi、Cursor、Gemini CLI……它们各自为政：
 
 1. **配置割裂** —— 每个 Agent 的 MCP 配置路径、格式都不一样（JSON / JSONC / TOML），装一个新 MCP server 要挨个改一遍；Skill 目录也是一人一套，同一个 skill 想给多个 Agent 用只能手动复制。
 2. **内容散落** —— 好用的 Skill 和 MCP 散落在 GitHub 与各类目录站，看到、试用、沉淀没有统一入口。
@@ -97,11 +97,14 @@
 | Claude Code | `~/.claude.json`（含项目级 `projects.*.mcpServers`） | `~/.claude/skills` | JSON | ✅ | ✅ |
 | ZCode | `~/.zcode/cli/config.json`（`mcp.servers`） | `~/.zcode/skills`、`~/.agents/skills` | JSON | ✅ | ✅ |
 | Codex CLI | `~/.codex/config.toml`（`[mcp_servers.*]`） | `~/.codex/skills` | TOML | ✅ | ✅（toml_edit 保留注释） |
+| Pi | `~/.pi/agent/mcp.json`（`mcpServers`） | `~/.pi/agent/skills`、`~/.agents/skills` | JSON | ✅ | ✅ |
 | Cursor | `~/.cursor/mcp.json` | `~/.cursor/skills` | JSONC | ⚠️ 严格 JSON 时可读 | 计划中（待 JSONC 行为核验） |
 | Gemini CLI | `~/.gemini/settings.json` | — | JSON | ✅ | ✅ |
 | Claude Desktop | `%APPDATA%\Claude\claude_desktop_config.json` | — | JSON | ✅ | ✅ |
 
-新 Agent 接入 = 在 `registry.json` 加一条声明 + 实现一个 Connector 适配器。
+新 Agent 接入 = 在 `registry.json` 加一条声明 + 在 `connector::generic::make_connector` 挂一个分支；配置格式已是标准 `mcpServers` 映射的（如 Pi、Gemini CLI）直接复用 `GenericJsonMcpConnector`，零新增代码。
+
+> **skillDirs 的顺序有语义**：读取时扫全部目录，**写入（安装 skill / 同步）只认首项**（`registry.rs` 与 `sync.rs` 均取 `dirs.first()`）。所以私有目录必须排在共享目录之前 —— 例如 Pi 写作 `~/.pi/agent/skills, ~/.agents/skills`，避免把 skill 误写进跨 Agent 共享的 `~/.agents/skills` 而连带影响 ZCode。
 
 ## 架构
 

@@ -1,7 +1,7 @@
 //! MCP 连通性测试：stdio 握手用 Python 假服务器做确定性测试（不依赖网络）。
 
 use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use agenthub_core::model::McpServerDef;
 use agenthub_core::runner::test_def;

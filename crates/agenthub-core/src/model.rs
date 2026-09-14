@@ -30,8 +30,14 @@ pub struct AgentDescriptor {
     pub mcp_config_paths: OsPaths,
     #[serde(default)]
     pub skill_dirs: OsPaths,
+    #[serde(default = "default_mcp_format")]
+    pub mcp_format: String,
     #[serde(default = "default_reload")]
     pub reload: String,
+}
+
+fn default_mcp_format() -> String {
+    "json-map".into()
 }
 
 fn default_reload() -> String {

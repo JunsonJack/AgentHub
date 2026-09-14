@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Delete, Edit, Link, Refresh, Search, Share, SwitchButton, Upload } from "@element-plus/icons-vue";
+import { Delete, Edit, Link, MoreFilled, Refresh, Search, Share, SwitchButton, Upload } from "@element-plus/icons-vue";
 import { useAgentsStore } from "../stores/agents";
 import { deployMcp, disableMcp, enableMcp, listDisabledMcp, propagateMcp, removeMcp, testMcp, testMcpDef } from "../api";
 import type { ConnectivityResult, DisabledRecord, McpEntry, McpServerDef } from "../api/types";
@@ -13,6 +13,10 @@ const { mcp, agents, loading, loaded, error } = storeToRefs(store);
 const keyword = ref("");
 const agentFilter = ref("");
 const viewMode = ref<"flat" | "grouped">("flat");
+const mcpPage = ref(1);
+const groupedPage = ref(1);
+const disabledPage = ref(1);
+const pageSize = 10;
 
 const agentName = (id: string) => agents.value.find((a) => a.id === id)?.name ?? id;
 
@@ -31,6 +35,14 @@ const filtered = computed(() =>
 
 const transportTag = (t: string) => (t === "stdio" ? "success" : t === "unknown" ? "info" : "warning");
 const scopeLabel = (s: string) => (s === "global" ? "全局" : s.startsWith("project:") ? "项目" : s);
+
+const disabled = ref<DisabledRecord[]>([]);
+const pagedGrouped = computed(() => grouped.value.slice((groupedPage.value - 1) * pageSize, groupedPage.value * pageSize));
+const pagedFiltered = computed(() => filtered.value.slice((mcpPage.value - 1) * pageSize, mcpPage.value * pageSize));
+const pagedDisabled = computed(() => disabled.value.slice((disabledPage.value - 1) * pageSize, disabledPage.value * pageSize));
+watch([keyword, agentFilter, viewMode], () => { mcpPage.value = 1; groupedPage.value = 1; });
+
+
 
 /* ---------- 跨 Agent 同步（MCP） ---------- */
 
@@ -102,8 +114,6 @@ async function refresh() {
 }
 
 /* ---------- 禁用 / 启用 ---------- */
-
-const disabled = ref<DisabledRecord[]>([]);
 
 async function onDisable(entry: McpEntry) {
   try {
@@ -321,11 +331,20 @@ async function onDelete(entry: McpEntry) {
   }
 }
 
+async function handleMcpAction(command: { action: "edit" | "test" | "sync" | "disable" | "delete"; row: McpEntry }) {
+  if (command.action === "edit") openEdit(command.row);
+  if (command.action === "test") await onTest(command.row);
+  if (command.action === "sync") openMcpSync(command.row);
+  if (command.action === "disable") await onDisable(command.row);
+  if (command.action === "delete") await onDelete(command.row);
+}
+
 onMounted(refresh);
+
 </script>
 
 <template>
-  <div>
+  <div class="management-page">
     <div class="toolbar">
       <el-input v-model="keyword" :prefix-icon="Search" placeholder="搜索 server 名 / command / url" clearable class="kw" />
       <el-select v-model="agentFilter" placeholder="全部 Agent" clearable class="agent-select">
@@ -348,7 +367,8 @@ onMounted(refresh);
       class="mb"
     />
 
-    <el-table v-if="viewMode === 'grouped'" :data="grouped" v-loading="loading && !loaded" stripe class="mcp-table">
+    <div class="table-region" v-if="viewMode === 'grouped'">
+      <el-table height="100%" :data="pagedGrouped" v-loading="loading && !loaded" stripe class="mcp-table">
       <el-table-column label="Server" min-width="180">
         <template #default="{ row }">
           <span class="server-name">{{ row.name }}</span>
@@ -383,9 +403,12 @@ onMounted(refresh);
           <span v-else>—</span>
         </template>
       </el-table-column>
-    </el-table>
+      </el-table>
+    </div>
+    <el-pagination v-if="viewMode === 'grouped'" v-model:current-page="groupedPage" :page-size="pageSize" :total="grouped.length" layout="total, prev, pager, next" background class="table-pagination" />
 
-    <el-table v-else :data="filtered" v-loading="loading && !loaded" stripe class="mcp-table">
+    <div class="table-region" v-else>
+      <el-table height="100%" :data="pagedFiltered" v-loading="loading && !loaded" stripe class="mcp-table">
       <el-table-column label="Server" min-width="180">
         <template #default="{ row }">
           <span class="server-name">{{ row.name }}</span>
@@ -411,51 +434,49 @@ onMounted(refresh);
           <code class="cmd">{{ row.command ?? row.url ?? "—" }}</code>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="350" fixed="right">
+      <el-table-column label="操作" width="112" fixed="right" class-name="action-column">
         <template #default="{ row }">
-          <el-button
-            size="small"
-            :icon="Edit"
-            :disabled="row.scope !== 'global'"
-            :title="row.scope !== 'global' ? '项目级条目暂不支持编辑，请在对应项目内修改' : ''"
-            @click="openEdit(row)"
-          >编辑</el-button>
-          <el-button
-            size="small"
-            :icon="Link"
-            :loading="testingKey === `${row.agentId}|${row.name}|${row.scope}`"
-            @click="onTest(row)"
-          >测试</el-button>
-          <el-button
-            size="small"
-            :icon="Share"
-            :disabled="row.scope !== 'global'"
-            :title="row.scope !== 'global' ? '项目级条目不支持同步' : ''"
-            @click="openMcpSync(row)"
-          >同步</el-button>
-          <el-button
-            size="small"
-            type="warning"
-            plain
-            :icon="SwitchButton"
-            :disabled="row.scope !== 'global'"
-            @click="onDisable(row)"
-          >禁用</el-button>
-          <el-button
-            size="small"
-            type="danger"
-            plain
-            :icon="Delete"
-            :disabled="row.scope !== 'global'"
-            @click="onDelete(row)"
-          />
+          <div class="row-actions">
+            <el-tooltip content="编辑" placement="top">
+              <el-button
+                text circle class="action-button action-button-primary"
+                :disabled="row.scope !== 'global'"
+                :title="row.scope !== 'global' ? '项目级条目暂不支持编辑，请在对应项目内修改' : ''"
+                @click="openEdit(row)"
+              ><el-icon><Edit /></el-icon></el-button>
+            </el-tooltip>
+            <el-dropdown trigger="click" @command="handleMcpAction">
+              <el-button text circle class="action-button" aria-label="更多操作">
+                <el-icon><MoreFilled /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item :command="{ action: 'test', row }">
+                    <el-icon><Link /></el-icon>测试连接
+                  </el-dropdown-item>
+                  <el-dropdown-item :command="{ action: 'sync', row }" :disabled="row.scope !== 'global'">
+                    <el-icon><Share /></el-icon>同步到其他 Agent
+                  </el-dropdown-item>
+                  <el-dropdown-item :command="{ action: 'disable', row }" :disabled="row.scope !== 'global'">
+                    <el-icon><SwitchButton /></el-icon>禁用 MCP
+                  </el-dropdown-item>
+                  <el-dropdown-item divided :command="{ action: 'delete', row }" :disabled="row.scope !== 'global'" class="danger-menu-item">
+                    <el-icon><Delete /></el-icon>删除 MCP
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
-    </el-table>
+      </el-table>
+    </div>
+    <el-pagination v-if="viewMode === 'flat'" v-model:current-page="mcpPage" :page-size="pageSize" :total="filtered.length" layout="total, prev, pager, next" background class="table-pagination" />
 
     <div v-if="disabled.length" class="disabled-section">
       <div class="disabled-head">已禁用条目（{{ disabled.length }}）</div>
-      <el-table :data="disabled" size="small" stripe>
+      <div class="table-region disabled-table-region">
+        <el-table height="100%" :data="pagedDisabled" size="small" stripe>
         <el-table-column prop="name" label="Server" min-width="160" />
         <el-table-column label="Agent" width="130">
           <template #default="{ row }">{{ agentName(row.agentId) }}</template>
@@ -463,15 +484,19 @@ onMounted(refresh);
         <el-table-column label="禁用时间" width="170">
           <template #default="{ row }">{{ new Date(row.disabledAt).toLocaleString("zh-CN", { hour12: false }) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="110" fixed="right">
+        <el-table-column label="操作" width="72" fixed="right" class-name="action-column">
           <template #default="{ row }">
-            <el-button size="small" type="success" plain :icon="SwitchButton" @click="onEnable(row)">还原</el-button>
+            <el-tooltip content="还原" placement="top">
+              <el-button text circle class="action-button action-button-success" @click="onEnable(row)">
+                <el-icon><SwitchButton /></el-icon>
+              </el-button>
+            </el-tooltip>
           </template>
         </el-table-column>
-      </el-table>
+        </el-table>
+      </div>
+      <el-pagination v-model:current-page="disabledPage" :page-size="pageSize" :total="disabled.length" layout="total, prev, pager, next" background class="table-pagination" />
     </div>
-
-    <!-- MCP 同步对话框 -->
     <el-dialog v-model="syncVisible" :title="`同步 MCP：${syncSourceEntry?.name ?? ''}（源：${agentName(syncSourceEntry?.agentId ?? '')}）`" width="460px">
       <el-form label-position="top">
         <el-form-item label="目标 Agent" required>
@@ -549,8 +574,33 @@ onMounted(refresh);
 </template>
 
 <style scoped>
-.toolbar { display: flex; gap: 10px; margin-bottom: 14px; }
-.kw { width: 320px; }
+.action-column :deep(.cell) { padding: 0 12px; }
+.row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.action-button {
+  width: 30px; height: 30px; padding: 0; border-radius: 9px;
+  color: var(--el-text-color-secondary); transition: all 0.2s ease;
+}
+.action-button:hover {
+  color: var(--el-text-color-primary); background: var(--el-fill-color-light);
+  transform: translateY(-1px);
+}
+.action-button-primary { color: var(--el-color-primary); }
+.action-button-primary:hover { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.action-button-success { color: var(--el-color-success); }
+.action-button-success:hover { color: var(--el-color-success); background: var(--el-color-success-light-9); }
+:deep(.el-dropdown-menu__item) { display: flex; align-items: center; gap: 8px; min-width: 180px; }
+:deep(.danger-menu-item) { color: var(--el-color-danger); }
+
+
+.management-page { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex: 0 0 auto; flex-wrap: wrap; }
+.table-region { height: clamp(280px, calc(100vh - 365px), 680px); overflow: hidden; border: 1px solid var(--el-border-color-lighter); border-radius: 12px; background: var(--el-bg-color); }
+.table-region :deep(.el-table) { height: 100%; }
+.table-region :deep(.el-table__body-wrapper) { overflow: hidden; }
+.table-pagination { display: flex; justify-content: flex-end; padding: 12px 0 2px; }
+.disabled-table-region { height: 220px; }
+
+
 .agent-select { width: 180px; }
 .mb { margin-bottom: 12px; }
 .server-name { font-weight: 600; }

@@ -1,4 +1,15 @@
 // 与 agenthub-core 的 serde camelCase 模型一一对应
+export interface AgentDescriptor {
+  id: string;
+  name: string;
+  kind: "cli" | "ide" | "desktop";
+  mcpConfigPaths: { windows: string[]; macos: string[]; linux: string[] };
+  skillDirs: { windows: string[]; macos: string[]; linux: string[] };
+  mcpFormat: string;
+  reload: string;
+}
+
+
 export interface AgentStatus {
   id: string;
   name: string;

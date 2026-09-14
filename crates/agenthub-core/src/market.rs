@@ -9,6 +9,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -454,14 +455,18 @@ pub struct FetchedUpstream {
 /// 拉取 Git 仓库（含子目录解析）到临时目录。调用方负责清理 cleanup_root。
 pub fn fetch_git_to_temp(url: &str) -> Result<FetchedUpstream> {
     let spec = parse_git_url(url)?;
-    let tmp = std::env::temp_dir().join(format!(
-        "agenthub-clone-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0)
-    ));
-    let _ = std::fs::remove_dir_all(&tmp);
+    let tmp = unique_temp_root("agenthub-clone");
+    // 名字已包含进程号与自增序列；仍能撞上只可能是上轮崩溃的残留，
+    // 不静默吞错（以前 `let _ = remove_dir_all` 会把 PermissionDenied 藏起来，
+    // 导致下游 git 报出与真因无关的 confusing 错误）
+    if tmp.exists() {
+        std::fs::remove_dir_all(&tmp).map_err(|e| {
+            CoreError::Other(format!(
+                "临时克隆目录 {} 已存在且无法清理（可能被其它进程占用）: {e}",
+                tmp.display()
+            ))
+        })?;
+    }
     // 克隆到 tmp/src 子目录：仓库根安装时才能把 src 重命名为规范 skill 名
     let src = tmp.join("src");
     let mut cmd = Command::new("git");
@@ -614,16 +619,44 @@ fn locate_skill_dir(clone_root: &Path, subpath: Option<&str>) -> Result<PathBuf>
 
 /* ---------------- 工具 ---------------- */
 
+static STAGE_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// 生成进程内绝不重名、跨进程几乎不重名的临时目录名。
+///
+/// 以前只用毫秒时间戳：并发的安装 / 更新检查落在同一毫秒会撞同一个目录，
+/// Windows 上表现为 remove_dir_all 报 PermissionDenied（被 `let _ =` 吞掉）
+/// 后 git clone 撞残留路径报 "already exists and is not an empty directory"；
+/// staging 目录更隐蔽：create_dir_all 遇到已存在目录会静默复用，
+/// 两个并发任务会在同一目录里互相污染快照。毫秒 + 进程号 + 自增序列消除这种碰撞。
+fn unique_temp_root(prefix: &str) -> PathBuf {
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    std::env::temp_dir().join(format!(
+        "{prefix}-{ms}-{}-{}",
+        std::process::id(),
+        STAGE_SEQ.fetch_add(1, Ordering::Relaxed)
+    ))
+}
+
 fn staging_dir() -> Result<PathBuf> {
-    let dir = std::env::temp_dir().join(format!(
-        "agenthub-stage-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0)
-    ));
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir)
+    // create_dir 在目录已存在时会原子失败，刚好当唯一性哨兵：
+    // 避免以前 create_dir_all 静默复用同一目录、并发任务互相污染快照
+    for _ in 0..8 {
+        let dir = unique_temp_root("agenthub-stage");
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => {
+                return Err(CoreError::Other(format!(
+                    "创建临时目录 {} 失败: {e}",
+                    dir.display()
+                )))
+            }
+        }
+    }
+    Err(CoreError::Other("连续多次获取唯一临时目录失败".into()))
 }
 
 fn extract_desc_from_md(md: &str) -> Option<String> {

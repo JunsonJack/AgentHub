@@ -77,6 +77,8 @@ pub struct Registry {
 
 /// 设置键：路径覆写 JSON {"agent-id": {"mcpConfigPaths": [...], "skillDirs": [...]}}
 pub const OVERRIDES_KEY: &str = "path_overrides";
+/// 用户自定义 Agent 描述数组（统一使用标准 mcpServers JSON 格式）。
+pub const CUSTOM_AGENTS_KEY: &str = "custom_agents";
 
 impl Registry {
     pub fn load() -> Result<Self> {
@@ -87,7 +89,12 @@ impl Registry {
             .and_then(|s| s.get_setting(OVERRIDES_KEY).ok().flatten())
             .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
             .unwrap_or(serde_json::Value::Null);
-        Ok(Self::with_overrides(base, &overrides))
+        let custom = crate::store::Store::open_default()
+            .ok()
+            .and_then(|s| s.get_setting(CUSTOM_AGENTS_KEY).ok().flatten())
+            .and_then(|raw| serde_json::from_str::<Vec<AgentDescriptor>>(&raw).ok())
+            .unwrap_or_default();
+        Ok(Self::with_overrides_and_custom(base, &overrides, custom))
     }
 
     pub fn with_base(base: PathBuf) -> Self {
@@ -95,7 +102,17 @@ impl Registry {
     }
 
     pub fn with_overrides(base: PathBuf, overrides: &serde_json::Value) -> Self {
+        Self::with_overrides_and_custom(base, overrides, vec![])
+    }
+
+    pub fn with_overrides_and_custom(
+        base: PathBuf,
+        overrides: &serde_json::Value,
+        custom: Vec<AgentDescriptor>,
+    ) -> Self {
         let mut descs: Vec<AgentDescriptor> = descriptors().iter().cloned().collect();
+        let built_in: std::collections::HashSet<String> = descs.iter().map(|d| d.id.clone()).collect();
+        descs.extend(custom.into_iter().filter(|d| !built_in.contains(&d.id)));
         apply_overrides(&mut descs, overrides);
         Self {
             connectors: descs

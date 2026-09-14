@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Delete, Edit, Plus, Refresh, Search } from "@element-plus/icons-vue";
+import { CopyDocument, Delete, Edit, Plus, Refresh, Search, TopRight } from "@element-plus/icons-vue";
 import {
   addCollectionItem,
   deleteCollectionItem,
@@ -9,6 +9,8 @@ import {
   updateCollectionItem,
 } from "../api";
 import type { CollectionEntry } from "../api/types";
+import { openExternal } from "../utils/external";
+import { copyText } from "../utils/clipboard";
 
 const items = ref<CollectionEntry[]>([]);
 const loading = ref(false);
@@ -143,6 +145,20 @@ async function remove(item: CollectionEntry) {
   }
 }
 
+/** 非链接入口（按钮 / 键盘）用的显式打开；点 <a> 时交给全局守卫，不重复挂处理器 */
+function openTool(item: CollectionEntry) {
+  void openExternal(item.source);
+}
+
+/** 非 http(s) 的条目（如 CLI 命令、本地路径）不能当链接看 */
+function isWebUrl(source: string): boolean {
+  return /^https?:\/\//i.test(source.trim());
+}
+
+function copySource(item: CollectionEntry) {
+  void copyText(item.source, `已复制「${item.name}」链接`);
+}
+
 onMounted(refresh);
 </script>
 
@@ -166,10 +182,29 @@ onMounted(refresh);
         <el-card shadow="hover">
           <template #header>
             <div class="card-head">
-              <a :href="item.source" class="tool-name">{{ item.name }}</a>
-              <div>
-                <el-button size="small" :icon="Edit" @click="openEdit(item)" />
-                <el-button size="small" type="danger" plain :icon="Delete" @click="remove(item)" />
+              <template v-if="isWebUrl(item.source)">
+                <el-tooltip content="在系统默认浏览器打开（不会离开本应用）" placement="top">
+                  <a class="tool-name" :href="item.source">
+                    <span class="tool-name-text">{{ item.name }}</span>
+                    <el-icon class="ext-icon"><TopRight /></el-icon>
+                  </a>
+                </el-tooltip>
+              </template>
+              <el-tooltip v-else content="非网页地址（CLI / 本地路径），已按原样展示" placement="top">
+                <span class="tool-name is-plain">{{ item.name }}</span>
+              </el-tooltip>
+              <div class="card-ops">
+                <el-button
+                  v-if="isWebUrl(item.source)"
+                  size="small"
+                  text
+                  :icon="TopRight"
+                  title="在浏览器打开"
+                  @click="openTool(item)"
+                />
+                <el-button size="small" text :icon="CopyDocument" title="复制链接" @click="copySource(item)" />
+                <el-button size="small" text :icon="Edit" title="编辑" @click="openEdit(item)" />
+                <el-button size="small" text type="danger" :icon="Delete" title="删除" @click="remove(item)" />
               </div>
             </div>
           </template>
@@ -179,7 +214,8 @@ onMounted(refresh);
           </div>
           <div class="bottom">
             <el-rate :model-value="item.stars" disabled size="small" />
-            <span class="url" :title="item.source">{{ item.source }}</span>
+            <a v-if="isWebUrl(item.source)" class="url" :href="item.source" :title="item.source">{{ item.source }}</a>
+            <span v-else class="url" :title="item.source">{{ item.source }}</span>
           </div>
         </el-card>
       </el-col>
@@ -220,7 +256,15 @@ onMounted(refresh);
 .sel { width: 150px; }
 .card-col { margin-bottom: 16px; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.tool-name { font-weight: 600; color: var(--el-color-primary); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-ops { display: flex; align-items: center; flex: none; }
+.tool-name {
+  display: inline-flex; align-items: center; gap: 4px; min-width: 0;
+  font-weight: 600; color: var(--el-color-primary); text-decoration: none; cursor: pointer;
+}
+.tool-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-name:hover .tool-name-text { text-decoration: underline; }
+.tool-name.is-plain { color: var(--el-text-color-primary); cursor: default; }
+.ext-icon { font-size: 12px; opacity: 0.7; flex: none; }
 .note {
   font-size: 12px; color: var(--el-text-color-regular); line-height: 1.6;
   min-height: 38px; margin-bottom: 8px;
@@ -228,6 +272,10 @@ onMounted(refresh);
 }
 .tag-row { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 4px; }
 .bottom { display: flex; justify-content: space-between; align-items: center; }
-.url { font-size: 11px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+.url {
+  font-size: 11px; color: var(--el-text-color-secondary); text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%;
+}
+a.url:hover { color: var(--el-color-primary); text-decoration: underline; }
 .url-row { display: flex; gap: 8px; width: 100%; }
 </style>

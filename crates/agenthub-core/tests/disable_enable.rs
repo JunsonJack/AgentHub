@@ -1,6 +1,6 @@
 //! MCP 禁用/启用测试：移出配置 + 记录 + 一键还原（含 TOML 注释保留往返）。
 
-use agenthub_core::connector::{claude_code::ClaudeCodeConnector, codex::CodexConnector, Connector};
+use agenthub_core::connector::{claude_code::ClaudeCodeConnector, Connector};
 use agenthub_core::registry::Registry;
 use agenthub_core::store::Store;
 

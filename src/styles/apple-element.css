@@ -1,0 +1,83 @@
+:root {
+  --el-color-primary: #007aff;
+  --el-color-primary-light-3: #4da3ff;
+  --el-color-primary-light-5: #80bdff;
+  --el-color-primary-light-7: #b3d7ff;
+  --el-color-primary-light-8: #cce5ff;
+  --el-color-primary-light-9: #e5f2ff;
+  --el-color-success: #34c759;
+  --el-color-warning: #ff9500;
+  --el-color-danger: #ff3b30;
+  --el-text-color-primary: #1d1d1f;
+  --el-text-color-regular: #424245;
+  --el-text-color-secondary: #86868b;
+  --el-text-color-placeholder: #a1a1a6;
+  --el-border-color: #d2d2d7;
+  --el-border-color-light: #e5e5ea;
+  --el-border-color-lighter: #eeeeF0;
+  --el-fill-color: #f2f2f7;
+  --el-fill-color-light: #f7f7f9;
+  --el-fill-color-lighter: #fafafd;
+  --el-fill-color-extra-light: #fbfbfd;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f5f5f7;
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 8px;
+}
+
+html, body, button, input, textarea, select {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+body { color: #1d1d1f; background: #f5f5f7; -webkit-font-smoothing: antialiased; }
+
+html.dark {
+  color-scheme: dark;
+  --el-color-primary: #0a84ff;
+  --el-color-primary-light-9: #102a44;
+  --el-text-color-primary: #f5f5f7;
+  --el-text-color-regular: #d1d1d6;
+  --el-text-color-secondary: #98989d;
+  --el-text-color-placeholder: #636366;
+  --el-border-color: #38383a;
+  --el-border-color-light: #2c2c2e;
+  --el-border-color-lighter: #242426;
+  --el-fill-color: #2c2c2e;
+  --el-fill-color-light: #242426;
+  --el-fill-color-extra-light: #1c1c1e;
+  --el-bg-color: #1c1c1e;
+  --el-bg-color-page: #000;
+}
+html.dark body { color: #f5f5f7; background: #000; }
+html.dark .app-shell { background: #000; }
+html.dark .app-aside, html.dark .app-header { background: rgba(28,28,30,.82); }
+html.dark .app-menu .el-menu-item.is-active { background: #102a44; color: #0a84ff; }
+html.dark .el-table { --el-table-header-bg-color: #242426; --el-table-row-hover-bg-color: #2c2c2e; --el-table-border-color: #38383a; color: #f5f5f7; }
+html.dark .el-table--striped .el-table__body tr.el-table__row--striped td { background: #202022; }
+html.dark .el-input__wrapper, html.dark .el-select__wrapper, html.dark .el-textarea__inner { background: #2c2c2e; box-shadow: 0 0 0 1px #48484a inset; color: #f5f5f7; }
+html.dark .el-card, html.dark .el-dialog, html.dark .el-drawer { background: #1c1c1e; border-color: #38383a; }
+
+.el-button { border-radius: 9px; font-weight: 500; transition: all .2s ease; }
+.el-button:not(.is-text):not(.is-link):hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0, 122, 255, .12); }
+.el-button--primary { border: none; box-shadow: 0 2px 6px rgba(0, 122, 255, .2); }
+.el-input__wrapper, .el-select__wrapper, .el-textarea__inner {
+  border-radius: 10px; box-shadow: 0 0 0 1px #d2d2d7 inset, 0 1px 2px rgba(0,0,0,.03);
+  transition: box-shadow .2s ease, background .2s ease;
+}
+.el-input__wrapper:hover, .el-select__wrapper:hover { box-shadow: 0 0 0 1px #a1a1a6 inset, 0 1px 2px rgba(0,0,0,.03); }
+.el-input__wrapper.is-focus, .el-select__wrapper.is-focused, .el-textarea__inner:focus { box-shadow: 0 0 0 2px rgba(0,122,255,.25) inset; }
+.el-table { --el-table-header-bg-color: #f5f5f7; --el-table-row-hover-bg-color: #f5f9ff; --el-table-border-color: #eeeef0; color: #1d1d1f; }
+.el-table th.el-table__cell { color: #6e6e73; font-weight: 600; font-size: 12px; }
+.el-table td.el-table__cell, .el-table th.el-table__cell { height: 48px; }
+.el-table--striped .el-table__body tr.el-table__row--striped td { background: #fafafd; }
+.el-card, .el-dialog, .el-drawer { border: 1px solid rgba(210,210,215,.75); border-radius: 14px; box-shadow: 0 14px 40px rgba(0,0,0,.1); }
+.el-dialog__header, .el-drawer__header { padding-bottom: 14px; }
+.el-tabs__item { font-weight: 500; color: #86868b; }
+.el-tabs__item.is-active { color: #007aff; font-weight: 600; }
+.el-tabs__active-bar { height: 3px; border-radius: 3px; }
+.el-tag { border-radius: 999px; }
+.el-alert { border-radius: 10px; border: none; }
+.el-pagination.is-background .btn-next, .el-pagination.is-background .btn-prev, .el-pagination.is-background .el-pager li { border-radius: 8px; }
+.el-dropdown-menu { border-radius: 12px; padding: 6px; box-shadow: 0 12px 32px rgba(0,0,0,.14); }
+.el-dropdown-menu__item { border-radius: 7px; }
+.el-message-box { border-radius: 14px; }
+.el-scrollbar__bar.is-vertical > div { background: rgba(134,134,139,.45); }

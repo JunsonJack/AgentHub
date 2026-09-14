@@ -1,6 +1,7 @@
 pub mod claude_code;
 pub mod codex;
 pub mod cursor;
+pub mod dsh;
 pub mod generic;
 pub mod json_config;
 pub mod zcode;
@@ -142,7 +143,8 @@ pub fn scan_skill_dirs(dirs: &OsPaths, base: &Path, agent_id: &str) -> Vec<Skill
 }
 
 /// 极简 YAML frontmatter 解析：只关心 name / description。
-/// 支持：单行值、单双引号、行内注释、折叠块（>）、字面块（|）、CRLF。
+/// 支持：单行值、单双引号、行内注释、折叠块（>）、字面块（|）、
+/// 空值后的缩进续行（YAML plain 多行标量，真实 SKILL.md 里很常见）、CRLF。
 pub fn parse_frontmatter(path: &Path) -> (Option<String>, Option<String>) {
     match std::fs::read_to_string(path) {
         Ok(text) => parse_frontmatter_str(&text),
@@ -211,7 +213,9 @@ pub fn parse_frontmatter_str(text: &str) -> (Option<String>, Option<String>) {
             _ => continue,
         };
         let v = value.trim();
-        if v == ">" || v == ">-" || v == ">+" || v == "|" || v == "|-" || v == "|+" {
+        // `>` / `|` 显式块，或 `key:` 后换行接缩进续行（plain 多行标量），
+        // 都走同一条累加路径；后者以前被当成空值直接丢弃，导致描述整段丢失。
+        if v.is_empty() || v.starts_with('>') || v.starts_with('|') {
             in_block = true;
             *t = Some(String::new());
         } else {
@@ -298,13 +302,23 @@ pub fn detect_by_paths(desc: &AgentDescriptor, base: &Path) -> Result<AgentStatu
     })
 }
 
-/// 统计 skill 目录下的子目录数（SKILL.md 完整性校验留给下一步）
+/// 统计所有已声明 skill 目录下的子目录数。
+/// 必须与 scan_skill_dirs 的口径一致（扫全部目录）：只取第一个目录会让
+/// 声明了共享目录（如 ~/.agents/skills）的 Agent 徒有偏小的徽标数。
 pub fn count_skills(dirs: &OsPaths, base: &Path) -> Option<usize> {
-    let dir = resolve_all(dirs, base).into_iter().find(|p| p.exists())?;
-    let n = std::fs::read_dir(&dir)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .count();
-    Some(n)
+    let mut found_any = false;
+    let mut total = 0;
+    for dir in resolve_all(dirs, base) {
+        if !dir.exists() {
+            continue;
+        }
+        found_any = true;
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            total += entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().is_dir())
+                .count();
+        }
+    }
+    found_any.then_some(total)
 }
