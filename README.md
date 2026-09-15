@@ -59,13 +59,13 @@
 ### Skill 管理中心
 - 跨 Agent 列表，区分用户级 / 项目级作用域；SKILL.md 渲染（DOMPurify 消毒）
 - **收编（adopt）**：把散落在各 Agent 目录的存量 skill 批量拉进中央库，支持 dry-run 预览，同名冲突拒绝覆盖
-- 删除走**回收站**，可随时恢复；支持从本地文件夹导入
+- 删除走**回收站**，可随时恢复；支持从本地文件夹 / **zip** 导入；**插件包（bundle）** 解析后一键装到多个 Agent
 - **跨 Agent 同步**：文件级 diff → 差异预览 → 传播；上游删除的文件默认扣留，只有显式确认才会删除
 
 ### 市场与收藏集
 - **skills.sh** 匿名搜索与安装（快照下载，无需任何凭证）；**SkillsMP** 搜索（匿名可用，配置 `sk_live_` 密钥提升配额并启用语义排序）
 - 粘贴 Git URL 安装：仓库根、`/tree/branch/子目录`、`URL#子路径` 均可（自动 shallow + sparse clone）
-- **收藏集**：内置精选清单（随软件版本化）+ 用户自建条目（标签 / 星级 / 备注）
+- **收藏集**：内置精选清单（随软件版本化）+ 用户自建条目（标签 / 星级 / 备注）；支持导出 / 导入 JSON
 - **版本更新**：对 `git:` 与 `skills.sh:` 来源的条目检测上游更新，check 与 apply 严格分离，更新前整体快照
 
 ### 配置 Profile
@@ -171,7 +171,7 @@ npm run tauri build  # 产物：target/release/bundle/nsis/*-setup.exe
 ```bash
 npm run build                            # 前端类型检查（vue-tsc）+ 构建
 cargo check --workspace --all-targets    # Rust 全工作区
-cargo test -p agenthub-core              # 核心层测试（56 例）
+cargo test -p agenthub-core              # 核心层测试
 cargo run -p agenthub-core --example list_agents      # 冒烟：读本机 Agent 真实状态
 cargo run -p agenthub-core --example market_smoke     # 冒烟：市场搜索与安装（写入临时目录）
 cargo run -p agenthub-core --example mcp_test_smoke   # 冒烟：对本机 MCP server 逐个握手

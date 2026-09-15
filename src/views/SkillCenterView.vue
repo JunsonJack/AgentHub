@@ -6,13 +6,16 @@ import {
   adoptSkill,
   applySkillSync,
   importSkillFolder,
+  installBundle,
   listLibrary,
   listSkills,
+  parseBundle,
   planSkillSync,
   readLibrarySkill,
   readSkillMd,
   removeSkill,
 } from "../api";
+import type { BundleInfo } from "../api/types";
 import type { AdoptReport, LibraryItem, PropagatePlan, SkillEntry, SyncReport } from "../api/types";
 import { renderMarkdown } from "../utils/markdown";
 
@@ -216,6 +219,66 @@ async function confirmImport() {
   }
 }
 
+/* ---------- 插件包安装 ---------- */
+
+const bundleDialogVisible = ref(false);
+const bundlePath = ref("");
+const bundleInfo = ref<BundleInfo | null>(null);
+const bundleAgents = ref<string[]>([]);
+const bundleInstalling = ref(false);
+const agentsForBundle = ref<{ id: string; name: string; installed: boolean }[]>([]);
+
+function openBundle() {
+  bundlePath.value = "";
+  bundleInfo.value = null;
+  bundleAgents.value = [];
+  bundleDialogVisible.value = true;
+  // 懒加载 Agent 列表，避免重复 import store
+  import("../stores/agents").then(async ({ useAgentsStore }) => {
+    const store = useAgentsStore();
+    await store.fetchAll().catch(() => undefined);
+    agentsForBundle.value = store.agents.filter((a) => a.installed);
+  });
+}
+
+async function previewBundle() {
+  const p = bundlePath.value.trim().replace(/^"|"$/g, "");
+  if (!p) {
+    ElMessage.warning("请输入插件包目录路径");
+    return;
+  }
+  try {
+    bundleInfo.value = await parseBundle(p);
+  } catch (e) {
+    bundleInfo.value = null;
+    ElMessage.error(String(e));
+  }
+}
+
+async function confirmBundle() {
+  const p = bundlePath.value.trim().replace(/^"|"$/g, "");
+  if (!p || !bundleAgents.value.length) {
+    ElMessage.warning("请填写路径并勾选至少一个 Agent");
+    return;
+  }
+  bundleInstalling.value = true;
+  try {
+    const r = await installBundle(p, bundleAgents.value);
+    if (r.adopt.conflict) {
+      ElMessage.warning(`中央库已有同名「${r.adopt.skillName}」，已拒绝覆盖`);
+    } else {
+      const ok = r.deploys.filter((d) => d.ok).length;
+      ElMessage.success(`已安装到中央库并部署 ${ok}/${bundleAgents.value.length} 个 Agent`);
+      bundleDialogVisible.value = false;
+      await refresh();
+    }
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    bundleInstalling.value = false;
+  }
+}
+
 /* ---------- 跨 Agent 同步 ---------- */
 
 const syncVisible = ref(false);
@@ -301,7 +364,8 @@ onMounted(refresh);
             <el-option label="用户级" value="user" />
             <el-option label="项目级" value="project" />
           </el-select>
-          <el-button :icon="FolderAdd" @click="openImport">导入文件夹</el-button>
+          <el-button :icon="FolderAdd" @click="openImport">导入文件夹 / zip</el-button>
+          <el-button @click="openBundle">安装插件包</el-button>
           <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
         </div>
 
@@ -464,13 +528,14 @@ onMounted(refresh);
       </template>
     </el-dialog>
 
-    <!-- 文件夹导入对话框 -->
-    <el-dialog v-model="importDialogVisible" title="从文件夹导入 skill" width="480px">
-      <el-input v-model="importPath" placeholder="skill 文件夹完整路径（含 SKILL.md）" clearable @keyup.enter="previewImport">
+    <!-- 文件夹 / zip 导入对话框 -->
+    <el-dialog v-model="importDialogVisible" title="从文件夹或 zip 导入 skill" width="480px">
+      <el-input v-model="importPath" placeholder="skill 文件夹路径，或 .zip 文件路径（内含 SKILL.md）" clearable @keyup.enter="previewImport">
         <template #append>
           <el-button @click="previewImport">预览</el-button>
         </template>
       </el-input>
+      <div class="import-hint mt">支持：目录直接导入；zip 根层含 SKILL.md，或唯一子目录含 SKILL.md。</div>
       <template v-if="importPlan">
         <el-alert
           v-if="importPlan.conflict"
@@ -506,6 +571,34 @@ onMounted(refresh);
       <template #footer>
         <el-button @click="adoptDialogVisible = false">取消</el-button>
         <el-button type="primary" :disabled="adoptPlan?.conflict" @click="confirmAdopt">执行收编</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 插件包安装 -->
+    <el-dialog v-model="bundleDialogVisible" title="安装插件包" width="520px">
+      <el-input v-model="bundlePath" placeholder="插件包目录路径（含 SKILL.md 或 manifest.json）" clearable @keyup.enter="previewBundle">
+        <template #append>
+          <el-button @click="previewBundle">解析</el-button>
+        </template>
+      </el-input>
+      <template v-if="bundleInfo">
+        <div class="mt">
+          <div><b>{{ bundleInfo.name }}</b>
+            <el-tag size="small" class="ml" effect="plain">{{ bundleInfo.kind }}</el-tag>
+            <el-tag v-if="bundleInfo.version" size="small" type="info" class="ml" effect="plain">{{ bundleInfo.version }}</el-tag>
+          </div>
+          <div class="bundle-desc mt">{{ bundleInfo.description || "（无描述）" }}</div>
+          <div class="mt">文件：{{ bundleInfo.files.join("、") || "—" }}</div>
+        </div>
+      </template>
+      <el-form-item label="安装到 Agent" class="mt">
+        <el-checkbox-group v-model="bundleAgents">
+          <el-checkbox v-for="a in agentsForBundle" :key="a.id" :value="a.id" :label="a.name" />
+        </el-checkbox-group>
+      </el-form-item>
+      <template #footer>
+        <el-button @click="bundleDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="bundleInstalling" :disabled="!bundleInfo || !bundleAgents.length" @click="confirmBundle">安装</el-button>
       </template>
     </el-dialog>
   </div>
@@ -606,6 +699,9 @@ onMounted(refresh);
 .path { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; }
 .mono :deep(textarea) { font-family: Consolas, monospace; }
 .mt { margin-top: 12px; }
+.import-hint { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.5; }
+.bundle-desc { font-size: 12px; color: var(--el-text-color-secondary); }
+.ml { margin-left: 6px; }
 .plan-block { border: 1px solid var(--el-border-color-lighter); border-radius: 6px; padding: 10px; margin-bottom: 10px; }
 .plan-head { margin-bottom: 6px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .plan-files { font-size: 12px; color: var(--el-text-color-secondary); font-family: Consolas, monospace; word-break: break-all; }

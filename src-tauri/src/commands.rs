@@ -92,10 +92,10 @@ pub fn read_library_skill(name: String) -> Result<String, String> {
     agenthub_core::library::read_library_skill_md(&name).map_err(|e| e.to_string())
 }
 
-/// 从本地文件夹导入 skill 到中央库（dry-run 先出预览）
+/// 从本地文件夹或 zip 导入 skill 到中央库（dry-run 先出预览）
 #[tauri::command]
 pub fn import_skill_folder(path: String, dry_run: bool) -> Result<agenthub_core::model::AdoptReport, String> {
-    agenthub_core::library::adopt(
+    agenthub_core::library::import_skill_path(
         std::path::Path::new(&path),
         "manual",
         dry_run,

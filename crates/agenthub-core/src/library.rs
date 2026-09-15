@@ -108,9 +108,124 @@ pub fn list_library_in(data_root: &Path) -> Vec<LibraryItem> {
     out
 }
 
-/// 读取某个库内条目的 SKILL.md 内容（详情抽屉渲染用）
-pub fn read_library_skill_md(name: &str) -> Result<String> {
-    read_skill_md_in(&app_data_dir(), name)
+/// 从本地路径导入 skill：目录直接 adopt；`.zip` 解压后定位 skill 根再 adopt。
+/// zip 结构支持：根层 SKILL.md、唯一子目录含 SKILL.md、或 `name/SKILL.md`。
+pub fn import_skill_path(source: &Path, source_tag: &str, dry_run: bool) -> Result<AdoptReport> {
+    import_skill_path_into(&app_data_dir(), source, source_tag, dry_run)
+}
+
+pub fn import_skill_path_into(
+    data_root: &Path,
+    source: &Path,
+    source_tag: &str,
+    dry_run: bool,
+) -> Result<AdoptReport> {
+    if !source.exists() {
+        return Err(CoreError::NotFound(source.display().to_string()));
+    }
+    let is_zip = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("zip"))
+        .unwrap_or(false);
+    if !is_zip {
+        return adopt_into(data_root, source, source_tag, dry_run);
+    }
+
+    let tmp = tempfile_dir()?;
+    // 解压到 tmp/<zip 去扩展名>/，使根层 SKILL.md 的 skill 名 = zip 文件名
+    let stem = source
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "imported-skill".into());
+    let extract_root = tmp.join(&stem);
+    std::fs::create_dir_all(&extract_root)?;
+    extract_zip(source, &extract_root)?;
+    let skill_root = find_skill_root(&extract_root)?;
+    let report = adopt_into(data_root, &skill_root, source_tag, dry_run)?;
+    let _ = std::fs::remove_dir_all(&tmp);
+    Ok(report)
+}
+
+fn tempfile_dir() -> Result<PathBuf> {
+    // 进程内自增 + 毫秒，避免并行导入/测试撞同一临时目录
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!(
+        "agenthub-zip-{}-{}-{}",
+        std::process::id(),
+        now_millis(),
+        n
+    ));
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+fn extract_zip(zip_path: &Path, dest: &Path) -> Result<()> {
+    let file = std::fs::File::open(zip_path)
+        .map_err(|e| CoreError::Other(format!("打开 zip 失败: {e}")))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| CoreError::Other(format!("解析 zip 失败: {e}")))?;
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| CoreError::Other(format!("读取 zip 条目失败: {e}")))?;
+        let Some(rel) = entry.enclosed_name() else {
+            continue; // 跳过路径穿越
+        };
+        let out = dest.join(&rel);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&out)?;
+            continue;
+        }
+        if let Some(parent) = out.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut buf = Vec::new();
+        std::io::Read::read_to_end(&mut entry, &mut buf)?;
+        std::fs::write(&out, buf)?;
+    }
+    Ok(())
+}
+
+/// 在解压目录中定位 skill 根：优先根层 SKILL.md，其次唯一子目录/直接子 skill。
+fn find_skill_root(extracted: &Path) -> Result<PathBuf> {
+    if extracted.join("SKILL.md").is_file() {
+        return Ok(extracted.to_path_buf());
+    }
+    let dirs: Vec<PathBuf> = std::fs::read_dir(extracted)?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    // 直接含 SKILL.md 的子目录
+    let with_md: Vec<&PathBuf> = dirs.iter().filter(|d| d.join("SKILL.md").is_file()).collect();
+    if with_md.len() == 1 {
+        return Ok(with_md[0].clone());
+    }
+    if with_md.len() > 1 {
+        return Err(CoreError::Other(format!(
+            "zip 内发现多个 skill（各自含 SKILL.md）：{}。请拆分后单独导入",
+            with_md
+                .iter()
+                .filter_map(|d| d.file_name())
+                .map(|n| n.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )));
+    }
+    // 唯一子目录时继续下钻一层（常见 GitHub 打包）
+    if dirs.len() == 1 {
+        let inner = find_skill_root(&dirs[0]);
+        if inner.is_ok() {
+            return inner;
+        }
+    }
+    Err(CoreError::Other(
+        "zip 内未找到 SKILL.md（根层或一级子目录）".into(),
+    ))
 }
 
 pub fn read_skill_md_in(data_root: &Path, name: &str) -> Result<String> {

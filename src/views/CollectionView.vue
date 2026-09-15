@@ -10,6 +10,8 @@ import {
   checkLibraryUpdate,
   deployLibrarySkill,
   deleteCollectionItem,
+  exportCollection,
+  importCollection,
   listCollection,
   listCurated,
   listLibrary,
@@ -339,6 +341,58 @@ async function runApply() {
 
 const agentName = (id: string) => agents.value.find((a) => a.id === id)?.name ?? id;
 
+/* ---------- 收藏集导入导出 ---------- */
+
+const collectionImportOpen = ref(false);
+const collectionImportRaw = ref("");
+const collectionImporting = ref(false);
+
+async function onExportCollection() {
+  try {
+    const data = await exportCollection();
+    if (!data.length) {
+      ElMessage.info("「我的收藏」为空，无需导出");
+      return;
+    }
+    await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    ElMessage.success(`已复制 ${data.length} 条收藏到剪贴板`);
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+async function onImportCollection() {
+  collectionImporting.value = true;
+  try {
+    const parsed = JSON.parse(collectionImportRaw.value) as CollectionEntry[];
+    if (!Array.isArray(parsed) || !parsed.length) {
+      ElMessage.warning("请粘贴收藏条目 JSON 数组");
+      return;
+    }
+    const cleaned = parsed
+      .filter((e) => e && typeof e.name === "string" && typeof e.source === "string")
+      .map((e) => ({
+        id: null as number | null,
+        kind: String(e.kind || "skill"),
+        name: String(e.name),
+        source: String(e.source),
+        tags: Array.isArray(e.tags) ? e.tags.map(String) : [],
+        note: String(e.note ?? ""),
+        stars: Number(e.stars) || 0,
+        builtIn: false,
+      }));
+    const n = await importCollection(cleaned as CollectionEntry[]);
+    ElMessage.success(`已导入 ${n} 条`);
+    collectionImportRaw.value = "";
+    collectionImportOpen.value = false;
+    await refreshCollection();
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    collectionImporting.value = false;
+  }
+}
+
 onMounted(() => {
   agentsStore.fetchAll().catch(() => undefined);
   refreshLibrary();
@@ -491,8 +545,26 @@ onMounted(() => {
 
         <div class="lib-toolbar">
           <span class="section-sub">我的条目</span>
-          <el-button size="small" type="primary" :icon="FolderAdd" @click="openNewItem">添加条目</el-button>
+          <div class="lib-actions">
+            <el-button size="small" type="primary" :icon="FolderAdd" @click="openNewItem">添加条目</el-button>
+            <el-button size="small" @click="onExportCollection">导出</el-button>
+            <el-button size="small" @click="collectionImportOpen = !collectionImportOpen">导入</el-button>
+          </div>
         </div>
+        <el-collapse-transition>
+          <div v-if="collectionImportOpen" class="import-box mb">
+            <el-input
+              v-model="collectionImportRaw"
+              type="textarea"
+              :rows="4"
+              spellcheck="false"
+              class="mono"
+              placeholder='[{"kind":"skill","name":"...","source":"git:https://...","tags":[],"note":"","stars":0}]'
+            />
+            <div class="import-hint mt">粘贴此前导出的 JSON 数组；导入只新增，不覆盖同名以外的数据冲突策略为逐条跳过失败项。</div>
+            <el-button type="primary" size="small" class="mt" :loading="collectionImporting" @click="onImportCollection">确认导入</el-button>
+          </div>
+        </el-collapse-transition>
         <el-table :data="myItems" v-loading="collectionLoading" stripe size="small">
           <el-table-column prop="name" label="名称" min-width="140" />
           <el-table-column prop="kind" label="类型" width="80" />
@@ -678,7 +750,11 @@ onMounted(() => {
 .mt { margin-top: 12px; }
 .deploy-line { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .hint { font-size: 12px; color: var(--el-text-color-secondary); }
-.lib-toolbar { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+.lib-toolbar { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.lib-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.import-box { padding: 12px; border: 1px dashed var(--el-border-color); border-radius: 8px; background: var(--el-fill-color-blank); }
+.import-hint { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.5; }
+.mono :deep(textarea) { font-family: Consolas, monospace; }
 .section-sub { font-weight: 600; }
 .hint { font-size: 12px; color: var(--el-text-color-secondary); }
 .deploy-line { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }

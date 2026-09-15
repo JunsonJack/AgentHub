@@ -22,6 +22,8 @@ aes-gcm = "0.10"
 rand = "0.8"
 base64 = "0.22"
 hostname = "0.4"
+# skill zip 导入
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Windows DPAPI：系统级用户绑定加密（密钥主路径）
 [target.'cfg(windows)'.dependencies]
