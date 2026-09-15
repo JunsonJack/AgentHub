@@ -523,7 +523,7 @@ onMounted(refresh);
           type="info"
           :closable="false"
           title="密钥保护规则"
-          description="TOKEN/KEY/SECRET 等密钥类 env：目标已有则保留本地值，没有则写占位符；其余 env 照常同步。写入前自动快照。"
+          description="TOKEN/KEY/SECRET 等密钥类 env：目标已有则保留本地值，没有则写占位符；其余 env 照常同步。写入前自动快照。可在设置页密钥库保存同名密钥，下发时自动注入。"
         />
         <template v-if="syncMcpResults">
           <el-divider />
@@ -570,6 +570,7 @@ onMounted(refresh);
           </el-form-item>
           <el-form-item label="env（JSON 对象，可选）">
             <el-input v-model="form.env" type="textarea" :rows="4" placeholder='{ "API_KEY": "..." }' />
+            <div class="env-hint">密钥类字段可用占位符 <code>__AGENTHUB_SECRET__:字段名</code>；若设置页密钥库已有同名条目，保存时会自动写入真实值。</div>
           </el-form-item>
         </template>
         <template v-else>
@@ -629,6 +630,8 @@ onMounted(refresh);
 }
 .mono :deep(textarea) { font-family: Consolas, monospace; }
 .save-btn { width: 100%; }
+.env-hint { margin-top: 6px; font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.5; }
+.env-hint code { font-size: 11px; background: var(--el-fill-color); padding: 1px 4px; border-radius: 3px; }
 .disabled-section { margin-top: 20px; }
 .disabled-head { font-weight: 600; margin-bottom: 10px; }
 .agent-tag { margin-right: 6px; margin-bottom: 2px; }

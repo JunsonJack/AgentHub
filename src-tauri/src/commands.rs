@@ -5,6 +5,33 @@ use agenthub_core::model::{
 use agenthub_core::registry::Registry;
 use tauri::State;
 
+/// 写入 Agent 配置前：把 `__AGENTHUB_SECRET__:NAME` 占位符替换为密钥库中的真实值。
+/// 密钥库不可用时原样写入占位符，不阻断下发。
+fn inject_vault_secrets(def: &mut McpServerDef) {
+    let Some(env) = def.env.as_ref() else {
+        return;
+    };
+    let has_placeholder = env.values().any(|v| {
+        v.as_str()
+            .map(|s| s.starts_with("__AGENTHUB_SECRET__:"))
+            .unwrap_or(false)
+    });
+    if !has_placeholder {
+        return;
+    }
+    let Ok(store) = agenthub_core::store::Store::open_default() else {
+        return;
+    };
+    let Ok(secrets) = store.get_all_secrets() else {
+        return;
+    };
+    if secrets.is_empty() {
+        return;
+    }
+    let injected = agenthub_core::secrets::inject_secrets_into_env(env, &secrets);
+    def.env = Some(injected);
+}
+
 #[tauri::command]
 pub fn list_agents(reg: State<Registry>) -> Result<Vec<AgentStatus>, String> {
     Ok(reg.statuses())
@@ -25,9 +52,10 @@ pub fn deploy_mcp(
     reg: State<Registry>,
     agent_ids: Vec<String>,
     name: String,
-    def: McpServerDef,
+    mut def: McpServerDef,
     scope: Option<String>,
 ) -> Result<Vec<DeployResult>, String> {
+    inject_vault_secrets(&mut def);
     Ok(reg.deploy_mcp(&agent_ids, &name, &def, scope.as_deref()))
 }
 

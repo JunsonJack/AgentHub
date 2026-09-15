@@ -282,6 +282,20 @@ impl Registry {
             .take_disabled_mcp(record_id)?
             .ok_or_else(|| CoreError::NotFound(format!("禁用记录 {record_id}")))?;
         let def: McpServerDef = serde_json::from_value(record.def)?;
+        // 还原时同样注入密钥库
+        let def = {
+            let mut def = def;
+            if let Ok(s) = crate::store::Store::open_default() {
+                if let Ok(secrets) = s.get_all_secrets() {
+                    if !secrets.is_empty() {
+                        if let Some(env) = def.env.as_ref() {
+                            def.env = Some(crate::secrets::inject_secrets_into_env(env, &secrets));
+                        }
+                    }
+                }
+            }
+            def
+        };
         self.find(&record.agent_id)?
             .upsert_mcp(&record.name, &def, &record.scope)
     }

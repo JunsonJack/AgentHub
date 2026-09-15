@@ -228,6 +228,11 @@ fn find_skill_root(extracted: &Path) -> Result<PathBuf> {
     ))
 }
 
+/// 读取某个库内条目的 SKILL.md 内容（详情抽屉渲染用）
+pub fn read_library_skill_md(name: &str) -> Result<String> {
+    read_skill_md_in(&app_data_dir(), name)
+}
+
 pub fn read_skill_md_in(data_root: &Path, name: &str) -> Result<String> {
     let path = skills_root(data_root).join(name).join("SKILL.md");
     if !path.is_file() {

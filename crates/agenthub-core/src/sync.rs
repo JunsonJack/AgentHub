@@ -342,6 +342,16 @@ pub fn propagate_mcp(
             .and_then(|e| e.raw.get("env").and_then(|v| v.as_object()).cloned());
         if let Some(src_env) = &source_env {
             def.env = Some(merge_env_for_target(src_env, target_env.as_ref()));
+            // 若目标缺失密钥，先看本机密钥库能否补全
+            if let Ok(store) = crate::store::Store::open_default() {
+                if let Ok(secrets) = store.get_all_secrets() {
+                    if !secrets.is_empty() {
+                        if let Some(env) = def.env.as_ref() {
+                            def.env = Some(crate::secrets::inject_secrets_into_env(env, &secrets));
+                        }
+                    }
+                }
+            }
         }
         out.extend(reg.deploy_mcp(std::slice::from_ref(target), name, &def, None));
     }

@@ -207,6 +207,7 @@ AgentHub/
 | **格式保留写入** | Cursor 的 JSONC、Codex 的 TOML 绝不 parse 后整体重写——JSON 保键序，TOML 走 `toml_edit` 保留注释与排版（有回归测试固化） |
 | **绝不代删** | 同名冲突一律拒绝覆盖；skill 删除先进回收站；同步时上游删除的文件默认扣留，只有显式确认才会删除 |
 | **密钥不外带** | 跨 Agent 传播 MCP 定义时，`TOKEN/KEY/SECRET/PASSWORD/CREDENTIAL` 类 env：目标已有则保留本地值，缺失则写占位符；其余 env 照常同步 |
+| **密钥库注入** | env 中 `__AGENTHUB_SECRET__:名称` 占位符在下发/同步/还原时，若密钥库已有同名条目则自动写入真实值 |
 | **密钥本机加密** | 设置页密钥库用 **Windows DPAPI** 加密（绑定当前用户）；列表只显示脱敏值，密文不回传前端 |
 
 其他约定：密钥库走 Windows DPAPI（绑定当前用户）；SkillsMP 密钥只存本机 SQLite；市场下载内容渲染前经 DOMPurify 消毒；WebView 默认启用 CSP；市场 HTTP 自动读取 `HTTPS_PROXY` 等环境变量，失败自动降级直连。
