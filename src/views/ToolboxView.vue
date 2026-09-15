@@ -160,6 +160,124 @@ function copySource(item: CollectionEntry) {
 }
 
 onMounted(refresh);
+
+/* ---------- 书签导入（Netscape Bookmark HTML） ---------- */
+
+const bookmarkDialogVisible = ref(false);
+const bookmarkHtml = ref("");
+const bookmarkFolderTag = ref("");
+const bookmarkImporting = ref(false);
+const bookmarkFileInput = ref<HTMLInputElement | null>(null);
+
+function openBookmarkImport() {
+  bookmarkHtml.value = "";
+  bookmarkFolderTag.value = "";
+  bookmarkDialogVisible.value = true;
+}
+
+async function onBookmarkFile(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    bookmarkHtml.value = await file.text();
+    ElMessage.success(`已读取 ${file.name}（${(file.size / 1024).toFixed(1)} KB）`);
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+  input.value = "";
+}
+
+interface ParsedBookmark {
+  name: string;
+  url: string;
+  folder: string;
+}
+
+function parseNetscapeBookmarks(html: string): ParsedBookmark[] {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const anchors = [...doc.querySelectorAll("a[href]")];
+  const out: ParsedBookmark[] = [];
+  const seen = new Set<string>();
+  for (const a of anchors) {
+    const url = (a.getAttribute("href") || "").trim();
+    if (!url || url.startsWith("javascript:") || url.startsWith("place:")) continue;
+    const name = (a.textContent || "").trim() || url;
+    // 最近文件夹：向上找 DL 的前驱 H3 / DT>H3
+    let folder = "";
+    let node: Element | null = a.parentElement;
+    while (node) {
+      if (node.tagName === "DL") {
+        const prev = node.previousElementSibling;
+        if (prev && prev.tagName === "H3") {
+          folder = (prev.textContent || "").trim();
+          break;
+        }
+        if (prev?.tagName === "DT") {
+          const h = prev.querySelector("H3");
+          if (h) {
+            folder = (h.textContent || "").trim();
+            break;
+          }
+        }
+      }
+      node = node.parentElement;
+    }
+    const key = url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name, url, folder });
+  }
+  return out;
+}
+
+async function confirmBookmarkImport() {
+  const html = bookmarkHtml.value.trim();
+  if (!html) {
+    ElMessage.warning("请粘贴书签 HTML 内容，或选择书签文件");
+    return;
+  }
+  bookmarkImporting.value = true;
+  try {
+    const parsed = parseNetscapeBookmarks(html);
+    if (!parsed.length) {
+      ElMessage.warning("未解析到有效书签（需 Netscape 格式：Chrome/Edge/Firefox 导出的 bookmarks.html）");
+      return;
+    }
+    const extraTag = bookmarkFolderTag.value.trim();
+    let ok = 0;
+    let skip = 0;
+    const existing = new Set(items.value.map((i) => i.source.toLowerCase()));
+    for (const b of parsed) {
+      if (existing.has(b.url.toLowerCase())) {
+        skip += 1;
+        continue;
+      }
+      const tags = ["bookmark"];
+      if (b.folder) tags.push(b.folder);
+      if (extraTag) tags.push(extraTag);
+      await addCollectionItem({
+        id: null,
+        kind: "tool",
+        name: b.name.slice(0, 80),
+        source: b.url,
+        tags,
+        note: b.folder ? `来自书签文件夹「${b.folder}」` : "来自浏览器书签导入",
+        stars: 0,
+        builtIn: false,
+      });
+      existing.add(b.url.toLowerCase());
+      ok += 1;
+    }
+    ElMessage.success(`已导入 ${ok} 条${skip ? `，跳过 ${skip} 条重复链接` : ""}`);
+    bookmarkDialogVisible.value = false;
+    await refresh();
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    bookmarkImporting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -170,6 +288,7 @@ onMounted(refresh);
         <el-option v-for="t in allTags" :key="t" :label="t" :value="t" />
       </el-select>
       <el-button type="primary" :icon="Plus" @click="openNew">添加工具</el-button>
+      <el-button @click="openBookmarkImport">导入书签</el-button>
       <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
     </div>
 
@@ -247,6 +366,34 @@ onMounted(refresh);
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 书签导入 -->
+    <el-dialog v-model="bookmarkDialogVisible" title="从浏览器书签导入" width="560px">
+      <el-alert
+        type="info"
+        :closable="false"
+        title="浏览器书签管理器 → 导出书签 → 得到 bookmarks.html"
+        description="支持 Chrome / Edge / Firefox 导出的 Netscape 格式。可选择文件，或直接粘贴 HTML 内容。重复链接会跳过。"
+        class="mb"
+      />
+      <div class="bookmark-actions mb">
+        <el-button @click="bookmarkFileInput?.click()">选择书签文件</el-button>
+        <input ref="bookmarkFileInput" type="file" accept=".html,.htm,text/html" class="hidden-file" @change="onBookmarkFile" />
+        <el-input v-model="bookmarkFolderTag" placeholder="附加标签（可选，如 个人）" class="tag-input" />
+      </div>
+      <el-input
+        v-model="bookmarkHtml"
+        type="textarea"
+        :rows="8"
+        spellcheck="false"
+        class="mono"
+        placeholder="<!DOCTYPE NETSCAPE-Bookmark-file-1> ..."
+      />
+      <template #footer>
+        <el-button @click="bookmarkDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="bookmarkImporting" @click="confirmBookmarkImport">解析并导入</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -278,4 +425,9 @@ onMounted(refresh);
 }
 a.url:hover { color: var(--el-color-primary); text-decoration: underline; }
 .url-row { display: flex; gap: 8px; width: 100%; }
+.mb { margin-bottom: 12px; }
+.bookmark-actions { display: flex; gap: 10px; align-items: center; }
+.tag-input { width: 200px; }
+.hidden-file { display: none; }
+.mono :deep(textarea) { font-family: Consolas, monospace; }
 </style>
