@@ -9,6 +9,8 @@ pub fn run() {
         // 外链 / 本地路径交由系统默认应用处理：webview 只有一个窗口且无后退键，
         // 任何在应用内跳转的外链都会把用户锁死在别人页面上。
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let registry = Registry::load()
                 .map_err(|e| format!("装载 Agent 注册表失败: {e}"))?;

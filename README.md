@@ -152,6 +152,10 @@
 
 构建产物 `target/release/bundle/nsis/AgentHub_0.1.0_x64-setup.exe`（约 3.8MB），双击安装。
 
+### 自动更新
+
+设置页「关于与更新」支持检查 / 下载安装（GitHub Releases）。首次分发需生成签名密钥并写入 `pubkey`，详见 [docs/发布与自动更新.md](docs/发布与自动更新.md)。
+
 ### 从源码运行
 
 ```bash
@@ -215,7 +219,7 @@ AgentHub/
 ## 测试
 
 ```bash
-cargo test -p agenthub-core   # 14 个套件 / 56 例
+cargo test -p agenthub-core   # 核心层全部测试
 ```
 
 覆盖：格式保留写入（TOML 注释无损、JSON 键序不变）、快照与回滚、收编 dry-run 与冲突拒绝、MCP 禁用/还原往返、健康度判定、市场 JSON 解析与 Git URL 解析、同步差异与删除扣留、Profile 密钥保护、连通性握手（Python 假服务器确定性用例）。写路径测试全部走临时目录，不触碰真实用户数据。
@@ -225,8 +229,9 @@ cargo test -p agenthub-core   # 14 个套件 / 56 例
 - [x] **P0** —— Agent 识别、MCP/Skill 双中心、快照安全网、健康度
 - [x] **P1** —— 同步引擎、收藏集、连通性测试、配置 Profile
 - [x] **P2（部分提前）** —— AI 工具箱、Skill 版本与更新
-- [x] **P2（安全与硬缺口）** —— 密钥 DPAPI 加密 + 设置页密钥库、Cursor JSONC 写入、项目级 MCP 编辑（Claude Code）、CSP 收紧
-- [ ] **P2（按反馈排期）** —— 插件包支持（前端入口）、反向管理、CLI 派生、自动更新、zip 导入、书签导入、Git 备份
+- [x] **P2（安全与硬缺口）** —— 密钥 DPAPI、Cursor JSONC、项目级 MCP、CSP、zip/书签导入、密钥注入
+- [x] **P2（自动更新）** —— tauri-plugin-updater + 设置页检查/安装（发布签名见 docs）
+- [ ] **P2（按反馈排期）** —— CLI 派生、反向管理、Git 备份
 
 ## FAQ
 

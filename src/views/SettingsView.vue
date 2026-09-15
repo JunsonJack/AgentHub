@@ -128,6 +128,7 @@ onMounted(() => {
   refreshOverrides();
   refreshCustomAgents();
   refreshSecrets();
+  readAppVersion();
 });
 
 /* ---------- 本机密钥库（DPAPI） ---------- */
@@ -226,6 +227,81 @@ async function onImportSecrets() {
 function fmtTimeMs(ms: number): string {
   if (!ms) return "—";
   return new Date(ms).toLocaleString("zh-CN", { hour12: false });
+}
+
+/* ---------- 应用更新 ---------- */
+
+const currentVersion = ref("");
+const checkingUpdate = ref(false);
+const updateAvailable = ref(false);
+const updateVersion = ref("");
+const updateNotes = ref("");
+const updateInstalling = ref(false);
+const updateError = ref("");
+const updateSupported = ref(true);
+
+function readAppVersion() {
+  currentVersion.value = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "0.1.0";
+}
+
+async function onCheckUpdate() {
+  checkingUpdate.value = true;
+  updateError.value = "";
+  try {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const update = await check();
+    if (update) {
+      updateAvailable.value = true;
+      updateVersion.value = update.version;
+      updateNotes.value = update.body ?? "";
+    } else {
+      updateAvailable.value = false;
+      updateVersion.value = "";
+      updateNotes.value = "";
+      ElMessage.success("已是最新版本");
+    }
+  } catch (e) {
+    const msg = String(e);
+    updateError.value = msg;
+    // 插件未就绪 / 未配置签名密钥 / 网络不可达
+    if (/plugin|not registered|pubkey|verif/i.test(msg)) {
+      updateSupported.value = false;
+    }
+    ElMessage.warning(`检查更新失败：${msg}`);
+  } finally {
+    checkingUpdate.value = false;
+  }
+}
+
+async function onInstallUpdate() {
+  try {
+    await ElMessageBox.confirm(
+      `将下载并安装 v${updateVersion.value}，完成后应用会自动重启。继续？`,
+      "安装更新",
+      { type: "info", confirmButtonText: "下载并安装", cancelButtonText: "稍后" }
+    );
+  } catch {
+    return;
+  }
+  updateInstalling.value = true;
+  updateError.value = "";
+  try {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const { relaunch } = await import("@tauri-apps/plugin-process");
+    const update = await check();
+    if (!update) {
+      ElMessage.info("没有可用更新");
+      return;
+    }
+    await update.downloadAndInstall();
+    ElMessage.success("更新完成，正在重启…");
+    await relaunch();
+  } catch (e) {
+    updateError.value = String(e);
+    ElMessage.error(`安装更新失败：${e}`);
+  } finally {
+    updateInstalling.value = false;
+  }
 }
 
 /* ---------- 回收站 ---------- */
@@ -383,6 +459,40 @@ async function onPrune() {
 
 <template>
   <div class="settings-page">
+    <!-- 关于与更新 -->
+    <div class="settings-group">
+      <div class="settings-group-header">关于与更新</div>
+      <div class="settings-group-body">
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <div class="settings-row-title">当前版本</div>
+            <div class="settings-row-desc">
+              AgentHub <code class="cmd">v{{ currentVersion || "0.1.0" }}</code>
+              <template v-if="!updateSupported"> · 本机尚未配置更新签名（需发布时生成 pubkey）</template>
+            </div>
+          </div>
+          <div class="settings-row-controls">
+            <el-button type="primary" :loading="checkingUpdate" @click="onCheckUpdate">检查更新</el-button>
+          </div>
+        </div>
+        <div v-if="updateAvailable" class="settings-row settings-row--col">
+          <div class="settings-row-label">
+            <div class="settings-row-title">发现新版本 v{{ updateVersion }}</div>
+            <div class="settings-row-desc" style="white-space: pre-wrap">{{ updateNotes || "（无更新说明）" }}</div>
+          </div>
+          <div class="settings-row-controls">
+            <el-button type="success" :loading="updateInstalling" @click="onInstallUpdate">下载并安装</el-button>
+          </div>
+        </div>
+        <div v-if="updateError" class="settings-row">
+          <div class="settings-row-label">
+            <div class="settings-row-title">最近一次检查</div>
+            <div class="settings-row-desc">{{ updateError }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 外观 -->
     <div class="settings-group">
       <div class="settings-group-header">外观</div>

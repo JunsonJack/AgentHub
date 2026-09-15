@@ -18,3 +18,5 @@ serde.workspace = true
 serde_json.workspace = true
 agenthub-core = { path = "../crates/agenthub-core" }
 tauri-plugin-opener = "2.5.5"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
