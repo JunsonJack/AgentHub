@@ -92,13 +92,21 @@ impl Connector for ClaudeCodeConnector {
         Ok(out)
     }
 
-    fn upsert_mcp(&self, name: &str, def: &McpServerDef) -> Result<WriteReport> {
+    fn upsert_mcp(&self, name: &str, def: &McpServerDef, scope: &str) -> Result<WriteReport> {
         let path = self.config_path();
         if !path.exists() {
             return Err(CoreError::NotFound(path.display().to_string()));
         }
         let mut root = read_json(&path)?;
-        obj_at(&mut root, &["mcpServers"])?.insert(name.into(), def_to_json(def));
+        if scope == "global" || scope.is_empty() {
+            obj_at(&mut root, &["mcpServers"])?.insert(name.into(), def_to_json(def));
+        } else if let Some(proj) = scope.strip_prefix("project:") {
+            // projects.<绝对路径>.mcpServers —— 路径原样作为键
+            obj_at(&mut root, &["projects", proj, "mcpServers"])?
+                .insert(name.into(), def_to_json(def));
+        } else {
+            return Err(CoreError::Other(format!("未知作用域: {scope}")));
+        }
         write_json_preserving(&path, &root)
     }
 

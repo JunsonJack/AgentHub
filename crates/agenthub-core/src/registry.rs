@@ -168,12 +168,15 @@ impl Registry {
     }
 
     /// 把一个 MCP server 定义批量下发到多个 Agent（写入前各连接器自动快照）
+    /// scope 默认 "global"；项目级传 `project:<路径>`（当前 Claude Code 支持写入）
     pub fn deploy_mcp(
         &self,
         agent_ids: &[String],
         name: &str,
         def: &McpServerDef,
+        scope: Option<&str>,
     ) -> Vec<DeployResult> {
+        let scope = scope.filter(|s| !s.is_empty()).unwrap_or("global");
         if let Err(e) = connector::validate_def(def) {
             return agent_ids
                 .iter()
@@ -187,7 +190,7 @@ impl Registry {
         }
         agent_ids
             .iter()
-            .map(|id| match self.find(id).and_then(|c| c.upsert_mcp(name, def)) {
+            .map(|id| match self.find(id).and_then(|c| c.upsert_mcp(name, def, scope)) {
                 Ok(r) => DeployResult {
                     agent_id: id.clone(),
                     ok: true,
@@ -279,7 +282,8 @@ impl Registry {
             .take_disabled_mcp(record_id)?
             .ok_or_else(|| CoreError::NotFound(format!("禁用记录 {record_id}")))?;
         let def: McpServerDef = serde_json::from_value(record.def)?;
-        self.find(&record.agent_id)?.upsert_mcp(&record.name, &def)
+        self.find(&record.agent_id)?
+            .upsert_mcp(&record.name, &def, &record.scope)
     }
 
     /// 把中央库里的 skill 复制安装到多个 Agent 的用户级 skill 目录。

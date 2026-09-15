@@ -51,7 +51,7 @@ fn dsh_upsert_merges_standard_fields_without_dropping_private_fields() {
     let path = fixture(home.path());
     let conn = DshConnector::with_descriptor(desc(), home.path().to_path_buf());
     let def = McpServerDef { command: Some("new-cmd".into()), args: vec!["--new".into()], ..Default::default() };
-    conn.upsert_mcp("MRO", &def).unwrap();
+    conn.upsert_mcp("MRO", &def, "global").unwrap();
     let root: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     let mro = &root["servers"][0];
     assert_eq!(mro["command"], "new-cmd");
@@ -67,7 +67,7 @@ fn dsh_upsert_adds_and_remove_only_named_server() {
     let path = fixture(home.path());
     let conn = DshConnector::with_descriptor(desc(), home.path().to_path_buf());
     let def = McpServerDef { url: Some("https://new.example/mcp".into()), ..Default::default() };
-    conn.upsert_mcp("new", &def).unwrap();
+    conn.upsert_mcp("new", &def, "global").unwrap();
     conn.remove_mcp("remote", "global").unwrap();
     let root: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     let names: Vec<_> = root["servers"].as_array().unwrap().iter().map(|x| x["name"].as_str().unwrap()).collect();
@@ -80,6 +80,6 @@ fn dsh_missing_config_does_not_create_file() {
     let home = tempfile::tempdir().unwrap();
     let conn = DshConnector::with_descriptor(desc(), home.path().to_path_buf());
     assert!(conn.list_mcp().unwrap().is_empty());
-    let err = conn.upsert_mcp("x", &McpServerDef::default()).unwrap_err().to_string();
+    let err = conn.upsert_mcp("x", &McpServerDef::default(), "global").unwrap_err().to_string();
     assert!(err.contains("DeepSeek Harness"));
 }

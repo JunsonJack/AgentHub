@@ -98,7 +98,7 @@
 | ZCode | `~/.zcode/cli/config.json`（`mcp.servers`） | `~/.zcode/skills`、`~/.agents/skills` | JSON | ✅ | ✅ |
 | Codex CLI | `~/.codex/config.toml`（`[mcp_servers.*]`） | `~/.codex/skills` | TOML | ✅ | ✅（toml_edit 保留注释） |
 | Pi | `~/.pi/agent/mcp.json`（`mcpServers`） | `~/.pi/agent/skills`、`~/.agents/skills` | JSON | ✅ | ✅ |
-| Cursor | `~/.cursor/mcp.json` | `~/.cursor/skills` | JSONC | ⚠️ 严格 JSON 时可读 | 计划中（待 JSONC 行为核验） |
+| Cursor | `~/.cursor/mcp.json` | `~/.cursor/skills` | JSONC | ✅ 容忍注释 | ✅ 结构保留写入（注释可能丢失，有快照） |
 | Gemini CLI | `~/.gemini/settings.json` | — | JSON | ✅ | ✅ |
 | Claude Desktop | `%APPDATA%\Claude\claude_desktop_config.json` | — | JSON | ✅ | ✅ |
 
@@ -206,8 +206,9 @@ AgentHub/
 | **格式保留写入** | Cursor 的 JSONC、Codex 的 TOML 绝不 parse 后整体重写——JSON 保键序，TOML 走 `toml_edit` 保留注释与排版（有回归测试固化） |
 | **绝不代删** | 同名冲突一律拒绝覆盖；skill 删除先进回收站；同步时上游删除的文件默认扣留，只有显式确认才会删除 |
 | **密钥不外带** | 跨 Agent 传播 MCP 定义时，`TOKEN/KEY/SECRET/PASSWORD/CREDENTIAL` 类 env：目标已有则保留本地值，缺失则写占位符；其余 env 照常同步 |
+| **密钥本机加密** | 设置页密钥库用 **Windows DPAPI** 加密（绑定当前用户）；列表只显示脱敏值，密文不回传前端 |
 
-其他约定：SkillsMP 密钥只存本机 SQLite（P2 计划迁移系统钥匙串）；市场下载内容渲染前经 DOMPurify 消毒；市场 HTTP 自动读取 `HTTPS_PROXY` 等环境变量，失败自动降级直连。
+其他约定：密钥库走 Windows DPAPI（绑定当前用户）；SkillsMP 密钥只存本机 SQLite；市场下载内容渲染前经 DOMPurify 消毒；WebView 默认启用 CSP；市场 HTTP 自动读取 `HTTPS_PROXY` 等环境变量，失败自动降级直连。
 
 ## 测试
 
@@ -222,15 +223,16 @@ cargo test -p agenthub-core   # 14 个套件 / 56 例
 - [x] **P0** —— Agent 识别、MCP/Skill 双中心、快照安全网、健康度
 - [x] **P1** —— 同步引擎、收藏集、连通性测试、配置 Profile
 - [x] **P2（部分提前）** —— AI 工具箱、Skill 版本与更新
-- [ ] **P2（按反馈排期）** —— OS keychain 加密密钥、插件包支持（Claude Code plugin / ZCode plugin 等 bundle 形态）、反向管理（Agent 会话内驱动 CLI）、CLI 派生、Cursor JSONC 写入、自动更新
+- [x] **P2（安全与硬缺口）** —— 密钥 DPAPI 加密 + 设置页密钥库、Cursor JSONC 写入、项目级 MCP 编辑（Claude Code）、CSP 收紧
+- [ ] **P2（按反馈排期）** —— 插件包支持（前端入口）、反向管理、CLI 派生、自动更新、zip 导入、书签导入、Git 备份
 
 ## FAQ
 
 **Q：SkillsMP / skills.sh 需要登录吗？**
 skills.sh 的搜索与安装走匿名端点，无需任何凭证；SkillsMP 匿名每天 50 次搜索，在设置页配置 `sk_live_` 密钥后每天 500 次并启用语义排序。密钥只存本机。
 
-**Q：为什么 Cursor 的 MCP 显示"无法按严格 JSON 解析"？**
-`~/.cursor/mcp.json` 官方示例带注释（JSONC）。当前版本仅在文件恰好是严格 JSON 时读取；写入支持待 W0 对该文件行为的核验完成后开放。
+**Q：Cursor 的 MCP 能读写吗？**
+能。`~/.cursor/mcp.json` 支持 JSONC（带注释）读取与写入。整体重写时注释可能无法原样保留，写入前会自动快照。
 
 **Q：同步 / Profile 会把我的 API Key 复制到别的 Agent 吗？**
 不会。密钥类 env 在目标 Agent 已有配置时保留其本地值；目标没有时写入 `<请在目标 Agent 中填写>` 占位符。非密钥 env 照常同步。

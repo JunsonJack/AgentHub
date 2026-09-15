@@ -343,7 +343,7 @@ pub fn propagate_mcp(
         if let Some(src_env) = &source_env {
             def.env = Some(merge_env_for_target(src_env, target_env.as_ref()));
         }
-        out.extend(reg.deploy_mcp(std::slice::from_ref(target), name, &def));
+        out.extend(reg.deploy_mcp(std::slice::from_ref(target), name, &def, None));
     }
     out
 }

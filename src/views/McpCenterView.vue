@@ -201,6 +201,8 @@ async function onTestDef() {
 const drawerVisible = ref(false);
 const editMode = ref<"form" | "source">("form");
 const isNew = ref(true);
+/** 编辑/下发作用域：global 或 project:<路径> */
+const editScope = ref("global");
 const form = reactive({
   name: "",
   command: "",
@@ -258,6 +260,7 @@ function openNew() {
   isNew.value = true;
   originEntry.value = null;
   editMode.value = "form";
+  editScope.value = "global";
   Object.assign(form, { name: "", command: "", args: "", env: "", url: "", agents: [] });
   sourceJson.value = "{}";
   drawerVisible.value = true;
@@ -267,6 +270,7 @@ function openEdit(entry: McpEntry) {
   isNew.value = false;
   originEntry.value = entry;
   editMode.value = "form";
+  editScope.value = entry.scope;
   form.name = entry.name;
   form.command = entry.command ?? "";
   form.args = entry.args.join(" ");
@@ -275,6 +279,12 @@ function openEdit(entry: McpEntry) {
   form.agents = [entry.agentId];
   sourceJson.value = JSON.stringify(entry.raw, null, 2);
   drawerVisible.value = true;
+}
+
+function scopeHint(scope: string): string {
+  if (scope === "global") return "全局";
+  if (scope.startsWith("project:")) return `项目 ${scope.slice(8)}`;
+  return scope;
 }
 
 async function save() {
@@ -300,10 +310,10 @@ async function save() {
     return;
   }
   try {
-    const results = await deployMcp(form.agents, name, def);
+    const results = await deployMcp(form.agents, name, def, editScope.value);
     const okAgents = results.filter((r) => r.ok).map((r) => agentName(r.agentId));
     const failed = results.filter((r) => !r.ok);
-    if (okAgents.length) ElMessage.success(`已写入：${okAgents.join("、")}`);
+    if (okAgents.length) ElMessage.success(`已写入（${scopeHint(editScope.value)}）：${okAgents.join("、")}`);
     failed.forEach((f) => ElMessage.error(`${agentName(f.agentId)} 失败：${f.error}`));
     drawerVisible.value = false;
     await refresh();
@@ -440,8 +450,8 @@ onMounted(refresh);
             <el-tooltip content="编辑" placement="top">
               <el-button
                 text circle class="action-button action-button-primary"
-                :disabled="row.scope !== 'global'"
-                :title="row.scope !== 'global' ? '项目级条目暂不支持编辑，请在对应项目内修改' : ''"
+                :disabled="row.agentId === 'cursor' && row.scope !== 'global'"
+                :title="row.agentId === 'cursor' ? 'Cursor 仅支持全局 mcp.json' : ''"
                 @click="openEdit(row)"
               ><el-icon><Edit /></el-icon></el-button>
             </el-tooltip>
@@ -457,10 +467,10 @@ onMounted(refresh);
                   <el-dropdown-item :command="{ action: 'sync', row }" :disabled="row.scope !== 'global'">
                     <el-icon><Share /></el-icon>同步到其他 Agent
                   </el-dropdown-item>
-                  <el-dropdown-item :command="{ action: 'disable', row }" :disabled="row.scope !== 'global'">
+                  <el-dropdown-item :command="{ action: 'disable', row }">
                     <el-icon><SwitchButton /></el-icon>禁用 MCP
                   </el-dropdown-item>
-                  <el-dropdown-item divided :command="{ action: 'delete', row }" :disabled="row.scope !== 'global'" class="danger-menu-item">
+                  <el-dropdown-item divided :command="{ action: 'delete', row }" class="danger-menu-item">
                     <el-icon><Delete /></el-icon>删除 MCP
                   </el-dropdown-item>
                 </el-dropdown-menu>
@@ -534,6 +544,14 @@ onMounted(refresh);
         <el-form-item label="Server 名称" required>
           <el-input v-model="form.name" :disabled="!isNew" placeholder="如 yapi" />
         </el-form-item>
+        <el-alert
+          v-if="editScope !== 'global'"
+          type="warning"
+          :closable="false"
+          class="mb"
+          :title="`项目级条目：${scopeHint(editScope)}`"
+          description="将写入该 Agent 配置中的对应项目作用域（如 Claude Code 的 projects.*.mcpServers）。项目路径作为配置键，请勿随意改名。"
+        />
 
         <el-radio-group v-model="editMode" class="mb">
           <el-radio-button value="form">表单模式</el-radio-button>

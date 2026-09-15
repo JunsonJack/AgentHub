@@ -26,8 +26,9 @@ pub fn deploy_mcp(
     agent_ids: Vec<String>,
     name: String,
     def: McpServerDef,
+    scope: Option<String>,
 ) -> Result<Vec<DeployResult>, String> {
-    Ok(reg.deploy_mcp(&agent_ids, &name, &def))
+    Ok(reg.deploy_mcp(&agent_ids, &name, &def, scope.as_deref()))
 }
 
 #[tauri::command]
@@ -524,4 +525,166 @@ pub fn skillsmp_clear_key() -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .delete_setting(SKILLSMP_KEY_SETTING)
         .map_err(|e| e.to_string())
+}
+
+/* ---------- 密钥管理（P2：API Key 加密存储） ---------- */
+
+#[tauri::command]
+pub fn list_secrets() -> Result<Vec<agenthub_core::secrets::SecretEntry>, String> {
+    agenthub_core::store::Store::open_default()
+        .map_err(|e| e.to_string())?
+        .list_secrets()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_secret(name: String, value: String) -> Result<i64, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    store.save_secret(&name, &value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_secret(name: String) -> Result<Option<String>, String> {
+    agenthub_core::store::Store::open_default()
+        .map_err(|e| e.to_string())?
+        .get_secret(&name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_secret(name: String) -> Result<(), String> {
+    agenthub_core::store::Store::open_default()
+        .map_err(|e| e.to_string())?
+        .delete_secret(&name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn export_secrets() -> Result<Vec<agenthub_core::secrets::SecretBackup>, String> {
+    agenthub_core::store::Store::open_default()
+        .map_err(|e| e.to_string())?
+        .export_secrets()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn import_secrets(entries: Vec<agenthub_core::secrets::SecretBackup>) -> Result<usize, String> {
+    agenthub_core::store::Store::open_default()
+        .map_err(|e| e.to_string())?
+        .import_secrets(&entries)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn scan_env_secrets(env: serde_json::Map<String, serde_json::Value>) -> Result<Vec<String>, String> {
+    Ok(env.keys()
+        .filter(|k| agenthub_core::secrets::is_sensitive_env_key(k))
+        .cloned()
+        .collect())
+}
+
+/* ---------- 插件包支持（P2） ---------- */
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BundleInfo {
+    pub name: String,
+    pub kind: String,
+    pub description: Option<String>,
+    pub version: Option<String>,
+    pub files: Vec<String>,
+}
+
+#[tauri::command]
+pub fn parse_bundle(path: String) -> Result<BundleInfo, String> {
+    let p = std::path::Path::new(&path);
+    if !p.is_dir() {
+        return Err("路径必须是一个目录".into());
+    }
+    
+    let name = p.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".into());
+    
+    let mut files = Vec::new();
+    let mut description = None;
+    let mut version = None;
+    let mut kind = "unknown".into();
+    
+    // 检测 bundle 类型
+    let manifest = p.join("manifest.json");
+    if manifest.exists() {
+        let content = std::fs::read_to_string(&manifest)
+            .map_err(|e| format!("读取 manifest.json 失败: {e}"))?;
+        if let Ok(obj) = serde_json::from_str::<serde_json::Value>(&content) {
+            description = obj.get("description").and_then(|v| v.as_str()).map(String::from);
+            version = obj.get("version").and_then(|v| v.as_str()).map(String::from);
+            kind = obj.get("kind").and_then(|v| v.as_str()).unwrap_or("plugin").into();
+        }
+    } else if p.join("SKILL.md").exists() {
+        kind = "skill".into();
+    }
+    
+    // 扫描文件
+    for entry in std::fs::read_dir(p).map_err(|e| format!("读取目录失败: {e}"))? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            if let Some(name) = entry.file_name().to_str() {
+                files.push(name.to_string());
+            }
+        }
+    }
+    
+    Ok(BundleInfo {
+        name,
+        kind,
+        description,
+        version,
+        files,
+    })
+}
+
+#[tauri::command]
+pub fn install_bundle(
+    reg: State<Registry>,
+    path: String,
+    agent_ids: Vec<String>,
+) -> Result<agenthub_core::model::InstallOutcome, String> {
+    let p = std::path::Path::new(&path);
+    if !p.is_dir() {
+        return Err("路径必须是一个目录".into());
+    }
+    
+    let adopt = agenthub_core::library::adopt(
+        p,
+        "bundle",
+        false,
+    ).map_err(|e| e.to_string())?;
+    
+    let deploys = reg.deploy_skill(&adopt.skill_name, &agent_ids, false);
+    
+    Ok(agenthub_core::model::InstallOutcome { adopt, deploys })
+}
+
+/* ---------- 社区化：收藏集导出/导入（P2） ---------- */
+
+#[tauri::command]
+pub fn export_collection() -> Result<Vec<agenthub_core::collection::CollectionEntry>, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    agenthub_core::collection::list_items(&store).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn import_collection(
+    entries: Vec<agenthub_core::collection::CollectionEntry>,
+) -> Result<usize, String> {
+    let store = agenthub_core::store::Store::open_default().map_err(|e| e.to_string())?;
+    let mut count = 0;
+    for entry in entries {
+        match agenthub_core::collection::add_item(&store, &entry) {
+            Ok(_) => count += 1,
+            Err(e) => eprintln!("导入条目 {} 失败: {}", entry.name, e),
+        }
+    }
+    Ok(count)
 }

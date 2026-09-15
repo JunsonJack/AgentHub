@@ -98,7 +98,10 @@ impl Connector for CodexConnector {
             .collect())
     }
 
-    fn upsert_mcp(&self, name: &str, def: &McpServerDef) -> Result<WriteReport> {
+    fn upsert_mcp(&self, name: &str, def: &McpServerDef, scope: &str) -> Result<WriteReport> {
+        if scope != "global" && !scope.is_empty() {
+            return Err(CoreError::Other(format!("未知作用域: {scope}（Codex 项目级写入待实现）")));
+        }
         let path = self.config_path();
         if !path.exists() {
             return Err(CoreError::NotFound(path.display().to_string()));

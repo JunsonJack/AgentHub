@@ -65,7 +65,18 @@ pub fn run() {
             commands::deploy_library_skill,
             commands::skillsmp_key_status,
             commands::skillsmp_set_key,
-            commands::skillsmp_clear_key
+            commands::skillsmp_clear_key,
+            commands::list_secrets,
+            commands::save_secret,
+            commands::get_secret,
+            commands::delete_secret,
+            commands::export_secrets,
+            commands::import_secrets,
+            commands::scan_env_secrets,
+            commands::parse_bundle,
+            commands::install_bundle,
+            commands::export_collection,
+            commands::import_collection
         ])
         .run(tauri::generate_context!())
         .expect("AgentHub 启动失败");

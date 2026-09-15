@@ -64,7 +64,7 @@ pub fn apply(
                     if let Some(src_env) = &def.env {
                         per_target.env = Some(crate::sync::merge_env_for_target(src_env, target_env.as_ref()));
                     }
-                    for r in reg.deploy_mcp(std::slice::from_ref(agent_id), &item.ref_name, &per_target) {
+                    for r in reg.deploy_mcp(std::slice::from_ref(agent_id), &item.ref_name, &per_target, None) {
                         out.push(ProfileApplyResult {
                             kind: "mcp".into(),
                             name: item.ref_name.clone(),

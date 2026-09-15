@@ -114,7 +114,7 @@ fn upsert_keeps_existing_servers_and_key_order() {
         args: vec!["-y".into(), "12306-mcp".into()],
         ..Default::default()
     };
-    conn.upsert_mcp("12306", &def).expect("upsert");
+    conn.upsert_mcp("12306", &def, "global").expect("upsert");
 
     let after: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&cfg).unwrap()).unwrap();
     let top: Vec<&str> = after.as_object().unwrap().keys().map(String::as_str).collect();
@@ -167,7 +167,7 @@ fn missing_config_is_not_created_implicitly() {
         command: Some("npx".into()),
         ..Default::default()
     };
-    let err = conn.upsert_mcp("x", &def).unwrap_err().to_string();
+    let err = conn.upsert_mcp("x", &def, "global").unwrap_err().to_string();
     assert!(err.contains("Pi"), "错误信息应指名 Agent：{err}");
     assert!(
         !home.path().join(".pi").join("agent").join("mcp.json").exists(),

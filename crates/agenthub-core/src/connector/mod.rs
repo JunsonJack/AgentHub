@@ -42,7 +42,7 @@ pub trait Connector: Send + Sync {
         ))
     }
 
-    fn upsert_mcp(&self, _name: &str, _def: &McpServerDef) -> Result<WriteReport> {
+    fn upsert_mcp(&self, _name: &str, _def: &McpServerDef, _scope: &str) -> Result<WriteReport> {
         Err(CoreError::Unsupported(format!(
             "{}: MCP 写入暂未实现",
             self.descriptor().name

@@ -37,7 +37,10 @@ impl Connector for DshConnector {
         Ok(entries_from_dsh(&self.desc.id, "global", root.get("servers").and_then(|v| v.as_array()).map(Vec::as_slice).unwrap_or(&[])))
     }
 
-    fn upsert_mcp(&self, name: &str, def: &McpServerDef) -> Result<WriteReport> {
+    fn upsert_mcp(&self, name: &str, def: &McpServerDef, scope: &str) -> Result<WriteReport> {
+        if scope != "global" && !scope.is_empty() {
+            return Err(CoreError::Other(format!("未知作用域: {scope}")));
+        }
         let path = self.path_or_not_found()?;
         let mut root = read_json(&path)?;
         let servers = root.get_mut("servers").and_then(|v| v.as_array_mut())

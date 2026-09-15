@@ -17,6 +17,7 @@ pub mod model;
 pub mod profiles;
 pub mod registry;
 pub mod runner;
+pub mod secrets;
 pub mod snapshot;
 pub mod store;
 pub mod sync;

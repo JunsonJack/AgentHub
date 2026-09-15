@@ -51,7 +51,10 @@ impl Connector for GenericJsonMcpConnector {
         Ok(entries_from_map(&self.desc.id, "global", servers))
     }
 
-    fn upsert_mcp(&self, name: &str, def: &McpServerDef) -> Result<WriteReport> {
+    fn upsert_mcp(&self, name: &str, def: &McpServerDef, scope: &str) -> Result<WriteReport> {
+        if scope != "global" && !scope.is_empty() {
+            return Err(crate::error::CoreError::Other(format!("未知作用域: {scope}")));
+        }
         let Some(path) = self.config_path() else {
             return Err(crate::error::CoreError::NotFound(
                 self.desc.name.clone(),
@@ -108,7 +111,7 @@ impl Connector for DetectOnlyConnector {
     fn list_mcp(&self) -> Result<Vec<McpEntry>> {
         Ok(vec![])
     }
-    fn upsert_mcp(&self, _n: &str, _d: &McpServerDef) -> Result<WriteReport> {
+    fn upsert_mcp(&self, _n: &str, _d: &McpServerDef, _scope: &str) -> Result<WriteReport> {
         Err(crate::error::CoreError::Unsupported("仅探测连接器".into()))
     }
 }

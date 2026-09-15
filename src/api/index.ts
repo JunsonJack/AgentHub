@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AdoptReport,
   AgentStatus,
+  BundleInfo,
   CollectionEntry,
   ConnectivityResult,
   DeployResult,
@@ -18,6 +19,8 @@ import type {
   ProfileItem,
   ProfileMeta,
   PropagatePlan,
+  SecretBackup,
+  SecretEntry,
   SkillEntry,
   SnapshotMeta,
   SyncReport,
@@ -42,12 +45,14 @@ export function listHealthIssues(): Promise<HealthIssue[]> {
 export function deployMcp(
   agentIds: string[],
   name: string,
-  def: McpServerDef
+  def: McpServerDef,
+  scope: string = "global"
 ): Promise<DeployResult[]> {
   return invoke<DeployResult[]>("deploy_mcp", {
     agentIds,
     name,
     def,
+    scope,
   });
 }
 
@@ -303,4 +308,54 @@ export function applyLibraryUpdate(
   deleteConfirmed: boolean
 ): Promise<UpdateApplyReport> {
   return invoke<UpdateApplyReport>("apply_library_update", { name, syncAgents, deleteConfirmed });
+}
+
+/* ---------- 密钥管理（P2：API Key 加密存储） ---------- */
+
+export function listSecrets(): Promise<SecretEntry[]> {
+  return invoke<SecretEntry[]>("list_secrets");
+}
+
+export function saveSecret(name: string, value: string): Promise<number> {
+  return invoke<number>("save_secret", { name, value });
+}
+
+export function getSecret(name: string): Promise<string | null> {
+  return invoke<string | null>("get_secret", { name });
+}
+
+export function deleteSecret(name: string): Promise<void> {
+  return invoke<void>("delete_secret", { name });
+}
+
+export function exportSecrets(): Promise<SecretBackup[]> {
+  return invoke<SecretBackup[]>("export_secrets");
+}
+
+export function importSecrets(entries: SecretBackup[]): Promise<number> {
+  return invoke<number>("import_secrets", { entries });
+}
+
+export function scanEnvSecrets(env: Record<string, unknown>): Promise<string[]> {
+  return invoke<string[]>("scan_env_secrets", { env });
+}
+
+/* ---------- 插件包支持（P2） ---------- */
+
+export function parseBundle(path: string): Promise<BundleInfo> {
+  return invoke<BundleInfo>("parse_bundle", { path });
+}
+
+export function installBundle(path: string, agentIds: string[]): Promise<InstallOutcome> {
+  return invoke<InstallOutcome>("install_bundle", { path, agentIds });
+}
+
+/* ---------- 社区化：收藏集导出/导入（P2） ---------- */
+
+export function exportCollection(): Promise<CollectionEntry[]> {
+  return invoke<CollectionEntry[]>("export_collection");
+}
+
+export function importCollection(entries: CollectionEntry[]): Promise<number> {
+  return invoke<number>("import_collection", { entries });
 }

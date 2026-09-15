@@ -4,20 +4,25 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { DeleteLocation, Key, Refresh, RefreshLeft } from "@element-plus/icons-vue";
 import { useTheme, type ThemeMode } from "../composables/theme";
 import {
+  deleteSecret,
+  exportSecrets,
   getCustomAgents,
   getPathOverrides,
+  importSecrets,
+  listSecrets,
   listSnapshots,
   listTrash,
   pruneSnapshots,
   restoreTrash,
   rollbackSnapshot,
+  saveSecret,
   setCustomAgents,
   setPathOverrides,
   skillsmpClearKey,
   skillsmpKeyStatus,
   skillsmpSetKey,
 } from "../api";
-import type { AgentDescriptor, SnapshotMeta, TrashItem } from "../api/types";
+import type { AgentDescriptor, SecretEntry, SnapshotMeta, TrashItem } from "../api/types";
 
 const snapshots = ref<SnapshotMeta[]>([]);
 const loading = ref(false);
@@ -122,7 +127,106 @@ onMounted(() => {
   refreshTrash();
   refreshOverrides();
   refreshCustomAgents();
+  refreshSecrets();
 });
+
+/* ---------- 本机密钥库（DPAPI） ---------- */
+
+const secrets = ref<SecretEntry[]>([]);
+const secretsLoading = ref(false);
+const secretName = ref("");
+const secretValue = ref("");
+const secretSaving = ref(false);
+const secretImportRaw = ref("");
+const secretImportOpen = ref(false);
+
+async function refreshSecrets() {
+  secretsLoading.value = true;
+  try {
+    secrets.value = await listSecrets();
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    secretsLoading.value = false;
+  }
+}
+
+async function onSaveSecret() {
+  const name = secretName.value.trim();
+  const value = secretValue.value;
+  if (!name || !value) {
+    ElMessage.warning("请填写密钥名称和值");
+    return;
+  }
+  secretSaving.value = true;
+  try {
+    await saveSecret(name, value);
+    ElMessage.success("已加密保存（Windows DPAPI，仅当前用户可解）");
+    secretName.value = "";
+    secretValue.value = "";
+    await refreshSecrets();
+  } catch (e) {
+    ElMessage.error(String(e));
+  } finally {
+    secretSaving.value = false;
+  }
+}
+
+async function onDeleteSecret(row: SecretEntry) {
+  try {
+    await ElMessageBox.confirm(
+      `删除密钥「${row.name}」？删除后无法从本应用恢复（若已导出备份可重新导入）。`,
+      "删除密钥",
+      { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  try {
+    await deleteSecret(row.name);
+    ElMessage.success("已删除");
+    await refreshSecrets();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+async function onExportSecrets() {
+  try {
+    const data = await exportSecrets();
+    if (!data.length) {
+      ElMessage.info("密钥库为空，无需导出");
+      return;
+    }
+    const json = JSON.stringify(data, null, 2);
+    await navigator.clipboard.writeText(json);
+    ElMessage.success(`已复制 ${data.length} 条明文密钥到剪贴板，请妥善保管，勿提交到仓库`);
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+async function onImportSecrets() {
+  try {
+    const parsed = JSON.parse(secretImportRaw.value) as { name: string; value: string }[];
+    if (!Array.isArray(parsed) || !parsed.length) {
+      ElMessage.warning("请粘贴形如 [{\"name\":\"...\",\"value\":\"...\"}] 的 JSON 数组");
+      return;
+    }
+    const n = await importSecrets(parsed.map((e) => ({ name: String(e.name ?? ""), value: String(e.value ?? "") })).filter((e) => e.name && e.value));
+    ElMessage.success(`已导入 ${n} 条`);
+    secretImportRaw.value = "";
+    secretImportOpen.value = false;
+    await refreshSecrets();
+  } catch (e) {
+    ElMessage.error(String(e));
+  }
+}
+
+function fmtTimeMs(ms: number): string {
+  if (!ms) return "—";
+  return new Date(ms).toLocaleString("zh-CN", { hour12: false });
+}
 
 /* ---------- 回收站 ---------- */
 
@@ -315,6 +419,63 @@ async function onPrune() {
           <div class="settings-row-label">
             <div class="settings-row-title">快照策略</div>
             <div class="settings-row-desc">任何写配置动作前自动快照；回滚前也会对当前文件再快照一次（可撤销）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 本机密钥库 -->
+    <div class="settings-group">
+      <div class="settings-group-header">本机密钥库</div>
+      <div class="settings-group-body">
+        <div class="settings-row settings-row--col">
+          <div class="settings-row-label">
+            <div class="settings-row-title">API Key / Token</div>
+            <div class="settings-row-desc">
+              用 <b>Windows DPAPI</b> 加密存储（绑定当前用户），列表只显示脱敏值，密文不会回传前端。
+              可供 MCP 的密钥类 env 本地注入使用。
+            </div>
+          </div>
+          <div class="settings-row-controls">
+            <div class="key-row">
+              <el-input v-model="secretName" placeholder="名称，如 OPENAI_API_KEY" class="secret-name-input" :prefix-icon="Key" />
+              <el-input v-model="secretValue" type="password" show-password placeholder="密钥值" class="key-input" />
+              <el-button type="primary" :loading="secretSaving" @click="onSaveSecret">保存</el-button>
+              <el-button @click="onExportSecrets">导出</el-button>
+              <el-button @click="secretImportOpen = !secretImportOpen">导入</el-button>
+            </div>
+            <el-collapse-transition>
+              <div v-if="secretImportOpen" class="mt">
+                <el-input
+                  v-model="secretImportRaw"
+                  type="textarea"
+                  :rows="4"
+                  spellcheck="false"
+                  class="mono"
+                  placeholder='[{"name":"OPENAI_API_KEY","value":"sk-..."}]'
+                />
+                <div class="settings-row-desc mt">导出为明文 JSON，便于跨机器迁移；导入后会按当前系统策略重新加密。</div>
+                <el-button type="primary" class="mt" @click="onImportSecrets">确认导入</el-button>
+              </div>
+            </el-collapse-transition>
+
+            <el-table class="mt" :data="secrets" v-loading="secretsLoading" size="small" stripe>
+              <el-table-column prop="name" label="名称" min-width="180" />
+              <el-table-column prop="masked" label="脱敏值" min-width="160">
+                <template #default="{ row }">
+                  <code class="cmd">{{ row.masked }}</code>
+                </template>
+              </el-table-column>
+              <el-table-column label="更新时间" width="170">
+                <template #default="{ row }">{{ fmtTimeMs(row.updatedAt) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="90" fixed="right">
+                <template #default="{ row }">
+                  <el-button size="small" type="danger" plain @click="onDeleteSecret(row)">删除</el-button>
+                </template>
+              </el-table-column>
+              <template #empty>密钥库为空——可在此保存 API Key，避免散落在各 Agent 配置里</template>
+            </el-table>
           </div>
         </div>
       </div>
@@ -561,8 +722,9 @@ async function onPrune() {
   background: var(--el-fill-color); padding: 1px 6px; border-radius: 4px;
   word-break: break-all;
 }
-.key-row { display: flex; gap: 10px; align-items: center; }
-.key-input { flex: 1; }
+.key-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.key-input { flex: 1; min-width: 180px; }
+.secret-name-input { flex: 0 0 220px; }
 .mono :deep(textarea) { font-family: Consolas, monospace; }
 
 /* 自定义 Agent */

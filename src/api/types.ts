@@ -224,3 +224,35 @@ export interface UpdateApplyReport {
   synced: SyncReport[];
   error: string | null;
 }
+
+/* ---------- 密钥管理 ---------- */
+
+export interface SecretEntry {
+  id: number;
+  name: string;
+  /** 脱敏展示，如 sk-1...cdef；不回传密文 */
+  masked: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 明文备份条目（导出/导入，由用户自行保管） */
+export interface SecretBackup {
+  name: string;
+  value: string;
+}
+
+export interface SyncSecretReport {
+  maskedFields: string[];
+  placeholderCount: number;
+}
+
+/* ---------- 插件包 ---------- */
+
+export interface BundleInfo {
+  name: string;
+  kind: string;
+  description: string | null;
+  version: string | null;
+  files: string[];
+}
