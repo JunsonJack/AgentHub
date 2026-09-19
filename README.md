@@ -9,7 +9,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-blue)](#快速开始)
 [![Engine](https://img.shields.io/badge/Tauri-2-orange)](https://tauri.app)
 [![Frontend](https://img.shields.io/badge/Vue%203-TypeScript-green)](https://vuejs.org)
-[![Tests](https://img.shields.io/badge/tests-56%20passing-brightgreen)](#测试)
+[![Tests](https://img.shields.io/badge/tests-96%20Rust%20%2B%2013%20front-brightgreen)](#测试)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 
 </div>
@@ -195,7 +195,7 @@ AgentHub/
 ├── crates/agenthub-core/       # 核心层（见架构图），不依赖任何 UI 框架
 │   ├── src/registry.json       # Agent 注册表：路径/格式声明是数据
 │   ├── src/curated.json        # 收藏集内置精选清单
-│   ├── tests/                  # 14 个测试套件（56 例）
+│   ├── tests/                  # 20 个测试套件（96 例）
 │   └── examples/               # 真机冒烟脚本
 ├── docs/                       # W0 调研笔记等
 └── scripts/                    # 图标生成等辅助脚本
@@ -222,7 +222,7 @@ AgentHub/
 cargo test -p agenthub-core   # 核心层全部测试
 ```
 
-覆盖：格式保留写入（TOML 注释无损、JSON 键序不变）、快照与回滚、收编 dry-run 与冲突拒绝、MCP 禁用/还原往返、健康度判定、市场 JSON 解析与 Git URL 解析、同步差异与删除扣留、Profile 密钥保护、连通性握手（Python 假服务器确定性用例）。写路径测试全部走临时目录，不触碰真实用户数据。
+覆盖：格式保留写入（TOML 注释无损、JSON 键序不变）、快照与回滚、收编 dry-run 与冲突拒绝、MCP 禁用/还原往返、健康度判定、市场 JSON 解析与 Git URL 解析、同步差异与删除扣留、Profile 密钥保护、连通性握手（Python 假服务器确定性用例）、DPAPI 密钥加解密、zip 导入、并发安装安全。前端测试覆盖 DOMPurify 消毒边界（script / 事件属性 / javascript: 链接 / iframe / style 注入全部剥离）。写路径测试全部走临时目录，不触碰真实用户数据。
 
 ## Roadmap
 

@@ -5,12 +5,26 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // 双开保护：第二个实例启动时聚焦已有窗口后退出，
+    // 避免两个进程同时操作同一份 SQLite / Agent 配置互相覆盖。
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.set_focus();
+            }
+        }));
+    }
+    builder
         // 外链 / 本地路径交由系统默认应用处理：webview 只有一个窗口且无后退键，
         // 任何在应用内跳转的外链都会把用户锁死在别人页面上。
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // 窗口位置 / 大小记忆（崩溃或断电也不丢上次布局）
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .setup(|app| {
             let registry = Registry::load()
                 .map_err(|e| format!("装载 Agent 注册表失败: {e}"))?;

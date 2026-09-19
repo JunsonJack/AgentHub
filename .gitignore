@@ -6,3 +6,11 @@ src-tauri/gen/
 *.local
 .DS_Store
 *.log
+.tauri/
+
+# Tauri 图标生成物（桌面打包只用 png/ico/icns）
+src-tauri/icons/android/
+src-tauri/icons/ios/
+src-tauri/icons/Square*.png
+src-tauri/icons/StoreLogo.png
+src-tauri/icons/source-1024.png

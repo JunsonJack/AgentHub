@@ -65,7 +65,19 @@ onMounted(refresh);
       <el-button :icon="Refresh" size="small" :loading="loading" @click="refresh">刷新</el-button>
     </div>
 
-    <el-row :gutter="16" v-loading="loading && !loaded">
+    <el-empty
+      v-if="loaded && installedCount === 0"
+      description="没有识别到任何 Agent——可能是都装在自定义位置"
+    >
+      <div class="first-run-hint">
+        <p>两种解决方式：</p>
+        <p>1. 到「设置 → Agent 路径覆写」手动指定配置路径；</p>
+        <p>2. 先去「市场与收藏」安装一个 skill，Agent 装好后这里会自动识别。</p>
+      </div>
+      <el-button type="primary" @click="$router.push('/settings')">去设置路径覆写</el-button>
+    </el-empty>
+
+    <el-row v-else :gutter="16" v-loading="loading && !loaded">
       <el-col v-for="a in agents" :key="a.id" :span="8" class="card-col">
         <el-card shadow="hover">
           <template #header>
@@ -116,4 +128,5 @@ onMounted(refresh);
 }
 .health-alert { margin-top: 10px; }
 .issue-alert { margin-bottom: 8px; }
+.first-run-hint { color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.8; margin-bottom: 12px; text-align: left; }
 </style>
